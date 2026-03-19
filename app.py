@@ -33,7 +33,7 @@ def calcular_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
 # LISTA DE MONITOREO TOP 10
-EMPRESAS_TOP = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+EMPRESAS_TOP = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD, "SPY", "PLTR"]
 
 st.title("🚀 Smart Scanner: Enfoque en Tendencia")
 

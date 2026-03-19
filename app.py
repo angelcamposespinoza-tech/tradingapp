@@ -21,7 +21,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# FUNCIONES MANUALES (Para evitar el error de pandas_ta)
+# FUNCIONES MANUALES
 def calcular_rsi(series, periods=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
@@ -32,28 +32,48 @@ def calcular_rsi(series, periods=14):
 def calcular_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
-# LISTA DE MONITOREO TOP 10
-EMPRESAS_TOP = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+# --- NUEVA SECCIÓN: GESTIÓN DE LISTA PERSONALIZADA ---
+st.sidebar.header("📋 Lista de Monitoreo")
+
+# Lista base fija
+EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+
+# Buscador para agregar nuevas
+nuevos_tickers = st.sidebar.text_input("Agregar Tickers (separados por coma)", value="").upper()
+
+# Combinar listas
+if nuevos_tickers:
+    adicionales = [t.strip() for t in nuevos_tickers.split(",") if t.strip()]
+    EMPRESAS_TOP = EMPRESAS_BASE + adicionales
+else:
+    EMPRESAS_TOP = EMPRESAS_BASE
+
+# ----------------------------------------------------
 
 st.title("🚀 Smart Scanner: Enfoque en Tendencia")
 
-# 2. MONITOR DE SEÑALES (TOP 10)
+# 2. MONITOR DE SEÑALES (DINÁMICO)
 @st.cache_data(ttl=300)
 def escanear_mercado(lista):
     resultados = []
     for t in lista:
-        df = yf.download(t, period="1y", interval="1d", progress=False)
-        if not df.empty:
-            if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
-            rsi_s = calcular_rsi(df['Close'])
-            if not rsi_s.empty:
-                rsi = rsi_s.iloc[-1]
-                precio = df['Close'].iloc[-1]
-                señal = "🔥 CALL" if rsi < 35 else "⚠️ PUT" if rsi > 65 else "⚖️ Neutral"
-                resultados.append({"T": t, "P": float(precio), "R": float(rsi), "S": señal})
+        try:
+            df = yf.download(t, period="1y", interval="1d", progress=False)
+            if not df.empty:
+                if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
+                rsi_s = calcular_rsi(df['Close'])
+                if not rsi_s.empty:
+                    rsi = rsi_s.iloc[-1]
+                    precio = df['Close'].iloc[-1]
+                    señal = "🔥 CALL" if rsi < 35 else "⚠️ PUT" if rsi > 65 else "⚖️ Neutral"
+                    resultados.append({"T": t, "P": float(precio), "R": float(rsi), "S": señal})
+        except:
+            continue
     return resultados
 
 datos_resumen = escanear_mercado(EMPRESAS_TOP)
+
+# Mostrar recuadros en filas de 5
 cols = st.columns(5)
 for i, res in enumerate(datos_resumen):
     with cols[i % 5]:
@@ -65,8 +85,8 @@ for i, res in enumerate(datos_resumen):
 st.markdown("---")
 
 # 3. ANÁLISIS DETALLADO
-st.sidebar.header("🔍 Configuración")
-ticker_ind = st.sidebar.text_input("Ticker", value="META").upper()
+st.sidebar.header("🔍 Configuración Gráfica")
+ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 intervalo = st.sidebar.selectbox("Vela", ("1m", "5m", "15m", "1h", "1d", "1wk"), index=4)
 periodo = st.sidebar.selectbox("Rango", ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "max"), index=5)
 
@@ -74,13 +94,11 @@ data = yf.download(ticker_ind, period=periodo, interval=intervalo, progress=Fals
 if not data.empty and data.columns.nlevels > 1: data.columns = data.columns.get_level_values(0)
 
 if not data.empty and len(data) > 15:
-    # Indicadores calculados manualmente
     data['RSI'] = calcular_rsi(data['Close'])
     data['EMA_20'] = calcular_ema(data['Close'], 20)
     data['EMA_50'] = calcular_ema(data['Close'], 50)
     data['EMA_200'] = calcular_ema(data['Close'], 200)
     
-    # Lógica de Martillos
     body = abs(data['Close'] - data['Open'])
     uw = data['High'] - data[['Close', 'Open']].max(axis=1)
     lw = data[['Close', 'Open']].min(axis=1) - data['Low']

@@ -6,17 +6,15 @@ import plotly.graph_objects as go
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
 
-# ESTILOS: Recuadros negros con texto blanco puro
+# ESTILOS
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
     [data-testid="stMetricValue"] { color: #ffffff !important; font-size: 28px !important; font-weight: bold; }
     [data-testid="stMetricLabel"] { color: #ffffff !important; font-size: 16px !important; opacity: 1; }
     div[data-testid="stMetric"] {
-        background-color: #161b22; 
-        border: 1px solid #30363d;
-        padding: 15px; 
-        border-radius: 10px;
+        background-color: #161b22; border: 1px solid #30363d;
+        padding: 15px; border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -32,52 +30,62 @@ def calcular_rsi(series, periods=14):
 def calcular_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
-# --- NUEVA SECCIÓN: GESTIÓN DE LISTA PERSONALIZADA ---
-st.sidebar.header("📋 Lista de Monitoreo")
+# --- BARRA LATERAL ---
+st.sidebar.header("📋 Configuración de Opciones")
 
-# Lista base fija
-EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+# Nueva función: Tiempo al vencimiento
+dias_vencimiento = st.sidebar.selectbox(
+    "¿Cuándo vence tu opción?",
+    ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"),
+    index=0
+)
 
-# Buscador para agregar nuevas
-nuevos_tickers = st.sidebar.text_input("Agregar Tickers (separados por coma)", value="").upper()
-
-# Combinar listas
-if nuevos_tickers:
-    adicionales = [t.strip() for t in nuevos_tickers.split(",") if t.strip()]
-    EMPRESAS_TOP = EMPRESAS_BASE + adicionales
+# Lógica automática de temporalidad según el vencimiento
+if dias_vencimiento == "Hoy (0DTE)":
+    v_intervalo, v_periodo = "1m", "1d"
+    zoom_msg = "Análisis Ultra Rápido (Scalping)"
+elif dias_vencimiento == "1 a 3 días":
+    v_intervalo, v_periodo = "5m", "5d"
+    zoom_msg = "Análisis de Corto Plazo"
+elif dias_vencimiento == "1 semana":
+    v_intervalo, v_periodo = "30m", "1mo"
+    zoom_msg = "Análisis Semanal (Swing)"
 else:
-    EMPRESAS_TOP = EMPRESAS_BASE
+    v_intervalo, v_periodo = "1d", "1y"
+    zoom_msg = "Análisis de Tendencia Maestra"
 
-# ----------------------------------------------------
+st.sidebar.info(f"Foco: {zoom_msg}")
 
-st.title("🚀 Smart Scanner: Enfoque en Tendencia")
+# Tickers adicionales
+nuevos_tickers = st.sidebar.text_input("Agregar Tickers (separados por coma)", value="").upper()
+EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
 
-# 2. MONITOR DE SEÑALES (DINÁMICO)
-@st.cache_data(ttl=300)
-def escanear_mercado(lista):
+st.title("🚀 Smart Scanner: Modo Opciones")
+
+# 2. MONITOR DE SEÑALES (AJUSTADO POR VENCIMIENTO)
+@st.cache_data(ttl=60) # Actualización rápida para 0DTE
+def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:
         try:
-            df = yf.download(t, period="1y", interval="1d", progress=False)
+            df = yf.download(t, period=peri, interval=inter, progress=False)
             if not df.empty:
                 if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
                 rsi_s = calcular_rsi(df['Close'])
                 if not rsi_s.empty:
                     rsi = rsi_s.iloc[-1]
                     precio = df['Close'].iloc[-1]
-                    señal = "🔥 CALL" if rsi < 35 else "⚠️ PUT" if rsi > 65 else "⚖️ Neutral"
+                    señal = "🔥 CALL" if rsi < 30 else "⚠️ PUT" if rsi > 70 else "⚖️ Neutral"
                     resultados.append({"T": t, "P": float(precio), "R": float(rsi), "S": señal})
-        except:
-            continue
+        except: continue
     return resultados
 
-datos_resumen = escanear_mercado(EMPRESAS_TOP)
-
-# Mostrar recuadros en filas de 5
+datos_resumen = escanear_mercado(EMPRESAS_TOP, v_intervalo, v_periodo)
 cols = st.columns(5)
 for i, res in enumerate(datos_resumen):
     with cols[i % 5]:
-        st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
+        st.metric(res['T'], f"${res['P']:,.2f}", f"RSI ({v_intervalo}): {res['R']:.1f}")
         if "CALL" in res['S']: st.success(res['S'])
         elif "PUT" in res['S']: st.error(res['S'])
         else: st.info(res['S'])
@@ -85,65 +93,33 @@ for i, res in enumerate(datos_resumen):
 st.markdown("---")
 
 # 3. ANÁLISIS DETALLADO
-st.sidebar.header("🔍 Configuración Gráfica")
+st.sidebar.header("🔍 Gráfico Manual")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
-intervalo = st.sidebar.selectbox("Vela", ("1m", "5m", "15m", "1h", "1d", "1wk"), index=4)
-periodo = st.sidebar.selectbox("Rango", ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "max"), index=5)
 
-data = yf.download(ticker_ind, period=periodo, interval=intervalo, progress=False)
+data = yf.download(ticker_ind, period=v_periodo, interval=v_intervalo, progress=False)
 if not data.empty and data.columns.nlevels > 1: data.columns = data.columns.get_level_values(0)
 
 if not data.empty and len(data) > 15:
     data['RSI'] = calcular_rsi(data['Close'])
     data['EMA_20'] = calcular_ema(data['Close'], 20)
-    data['EMA_50'] = calcular_ema(data['Close'], 50)
     data['EMA_200'] = calcular_ema(data['Close'], 200)
     
-    body = abs(data['Close'] - data['Open'])
-    uw = data['High'] - data[['Close', 'Open']].max(axis=1)
-    lw = data[['Close', 'Open']].min(axis=1) - data['Low']
-    es_v = data['Close'] > data['Open']
-    es_r = data['Close'] < data['Open']
-    
-    data['Hammer'] = (lw > (body * 2)) & (uw < (body * 0.5)) & (es_v)
-    data['Inv_Hammer'] = (uw > (body * 2)) & (lw < (body * 0.5)) & (es_r)
-
+    # Gráfica
     col_graf, col_info = st.columns([4, 1])
-    
     with col_graf:
-        st.subheader(f"Gráfico de Tendencia: {ticker_ind}")
-        fig = go.Figure(data=[go.Candlestick(
-            x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="Precio"
-        )])
-        
-        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange', width=1.5)))
-        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_50'], name="EMA 50", line=dict(color='cyan', width=1.5)))
-        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='#9370DB', width=3)))
-
-        h = data[data['Hammer'] == True]
-        fig.add_trace(go.Scatter(x=h.index, y=h['Low']*0.99, mode='markers', 
-                                 marker=dict(symbol='triangle-up', size=15, color='#00ff00'), name="Martillo Verde"))
-        ih = data[data['Inv_Hammer'] == True]
-        fig.add_trace(go.Scatter(x=ih.index, y=ih['High']*1.01, mode='markers', 
-                                 marker=dict(symbol='triangle-down', size=15, color='#ff4b4b'), name="Martillo Rojo"))
-
-        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800, margin=dict(l=0, r=0, t=30, b=0))
-        st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True})
+        st.subheader(f"Vista {v_intervalo} - {ticker_ind} ({zoom_msg})")
+        fig = go.Figure(data=[go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="Precio")])
+        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange')))
+        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='purple', width=2)))
+        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600)
+        st.plotly_chart(fig, use_container_width=True)
     
     with col_info:
         st.subheader("🎯 Señal")
-        r_val = data['RSI'].dropna()
-        if not r_val.empty:
-            v = r_val.iloc[-1]
-            st.metric("RSI Actual", f"{v:.2f}")
-            if v < 35: st.success("🎯 Sugerencia: CALL")
-            elif v > 65: st.error("🎯 Sugerencia: PUT")
-            else: st.info("⚖️ Neutral")
-        
-        st.write("---")
-        st.write("**Guía Rápida:**")
-        st.write("🟠 **20:** Corto plazo.")
-        st.write("🔵 **50:** Mediano plazo.")
-        st.write("🟣 **200:** Tendencia Maestra.")
+        v = data['RSI'].iloc[-1]
+        st.metric("RSI Actual", f"{v:.2f}")
+        if v < 30: st.success("🎯 CALL")
+        elif v > 70: st.error("🎯 PUT")
+        else: st.info("⚖️ Neutral")
 else:
-    st.error("⚠️ Datos insuficientes para este rango.")
+    st.error("⚠️ Sin datos suficientes.")

@@ -17,7 +17,6 @@ st.markdown("""
         background-color: #161b22; border: 1px solid #30363d;
         padding: 15px; border-radius: 10px;
     }
-    /* Estilo para que el texto de las señales en los cuadros sea negro y legible */
     .stAlert p { color: #000000 !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -88,7 +87,6 @@ cols = st.columns(5)
 for i, res in enumerate(datos_resumen):
     with cols[i % 5]:
         st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
-        # Aplicamos el color de fondo pero el texto será negro por el estilo CSS arriba
         if "CALL" in res['S']: st.success(res['S'])
         elif "PUT" in res['S']: st.error(res['S'])
         else: st.info(res['S'])
@@ -131,11 +129,28 @@ if not data.empty and len(data) > 15:
         fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
         fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
         fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800)
+        
+        # --- EL GRÁFICO ---
         st.plotly_chart(fig, use_container_width=True)
+
+        # --- AQUÍ VAN LAS NOTICIAS (Debajo del gráfico) ---
+        st.markdown("---")
+        st.subheader(f"📰 Últimas Noticias: {ticker_ind}")
+        try:
+            ticker_obj = yf.Ticker(ticker_ind)
+            news = ticker_obj.news[:5] 
+            if news:
+                for item in news:
+                    with st.expander(f"📌 {item['title']}"):
+                        st.write(f"**Fuente:** {item['publisher']}")
+                        st.write(f"[Leer noticia completa]({item['link']})")
+            else:
+                st.write("No hay noticias recientes disponibles.")
+        except:
+            st.write("Error al cargar noticias.")
     
     with col_info:
         st.subheader("🎯 Señal")
-        # Aquí aparece la etiqueta específica al lado del análisis individual
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
         

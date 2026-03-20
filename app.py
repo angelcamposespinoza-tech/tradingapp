@@ -161,13 +161,13 @@ if not data.empty and len(data) > 15:
         st.info(f"Operar: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** contratos")
 
         # --- COPILOTO IA REAL ---
+    # --- COPILOTO IA REAL ---
         st.markdown("---")
         st.subheader("🤖 Copiloto IA (Gemini)")
         
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:
-            # Contexto técnico para la IA
             contexto = f"""
             Eres un experto en trading. Datos de {ticker_ind}:
             - Precio: ${precio_actual:.2f}
@@ -183,7 +183,7 @@ if not data.empty and len(data) > 15:
                     response = model.generate_content(contexto)
                     st.write(response.text)
                 except Exception as e:
-    st.error(f"Error real: {e}")
+                    st.error(f"Error real: {e}")
                   
 else:
     st.error("Esperando datos...")

@@ -2,21 +2,20 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
 
-# ESTILOS: Recuadros negros con texto blanco puro
+# ESTILOS
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
     [data-testid="stMetricValue"] { color: #ffffff !important; font-size: 28px !important; font-weight: bold; }
     [data-testid="stMetricLabel"] { color: #ffffff !important; font-size: 16px !important; opacity: 1; }
     div[data-testid="stMetric"] {
-        background-color: #161b22; 
-        border: 1px solid #30363d;
-        padding: 15px; 
-        border-radius: 10px;
+        background-color: #161b22; border: 1px solid #30363d;
+        padding: 15px; border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -35,8 +34,6 @@ def calcular_ema(series, span):
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
-
-# REGLA DE ORO: 2% Riesgo / 4% Ganancia sobre el CAPITAL TOTAL
 dinero_en_riesgo = capital_total * 0.02
 meta_ganancia = capital_total * 0.04
 
@@ -44,27 +41,16 @@ st.sidebar.info(f"Riesgo Máximo (2%): **${dinero_en_riesgo:.2f}**")
 st.sidebar.success(f"Meta Ganancia (4%): **${meta_ganancia:.2f}**")
 
 st.sidebar.header("📋 Configuración")
-dias_vencimiento = st.sidebar.selectbox(
-    "¿Cuándo vence tu opción?",
-    ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"),
-    index=0
-)
+dias_vencimiento = st.sidebar.selectbox("Vencimiento", ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"), index=0)
 
-# Lógica de tiempos
-tiempos = {
-    "Hoy (0DTE)": ("1m", "1d"),
-    "1 a 3 días": ("5m", "5d"),
-    "1 semana": ("30m", "1mo"),
-    "1 mes o más": ("1d", "1y")
-}
+tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": ("30m", "1mo"), "1 mes o más": ("1d", "1y")}
 v_intervalo, v_periodo = tiempos[dias_vencimiento]
 
-# Tickers adicionales
 nuevos_tickers = st.sidebar.text_input("Agregar Tickers (ej: COIN, MSTR)", value="").upper()
 EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
 
-st.title("🚀 Smart Scanner: Estrategia de Portafolio 2%/4%")
+st.title("🚀 Smart Scanner: Estrategia 2%/4% + Volumen")
 
 # 2. MONITOR DE SEÑALES (ARRIBA)
 @st.cache_data(ttl=60)
@@ -95,7 +81,7 @@ for i, res in enumerate(datos_resumen):
 
 st.markdown("---")
 
-# 3. ANÁLISIS DETALLADO Y ESTRATEGIA MATEMÁTICA
+# 3. ANÁLISIS DETALLADO, VOLUMEN Y ESTRATEGIA
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 
@@ -104,49 +90,67 @@ if not data.empty and len(data) > 15:
     if data.columns.nlevels > 1: data.columns = data.columns.get_level_values(0)
     
     precio_actual = data['Close'].iloc[-1]
-    data['RSI'] = calcular_rsi(data['Close'])
-    rsi_val = data['RSI'].iloc[-1]
-    data['EMA_20'] = calcular_ema(data['Close'], 20)
-    data['EMA_200'] = calcular_ema(data['Close'], 200)
+    rsi_val = calcular_rsi(data['Close']).iloc[-1]
+    
+    # Análisis de Volumen
+    vol_promedio = data['Volume'].rolling(window=20).mean().iloc[-1]
+    vol_actual = data['Volume'].iloc[-1]
+    fuerza_volumen = vol_actual / vol_promedio
 
-    # --- CÁLCULO PARA OPCIONES (1 Contrato = 100 acciones) ---
-    # Calculamos cuánto debe moverse la ACCIÓN para que perdamos/ganemos el % del CAPITAL TOTAL
-    # con 1 solo contrato.
     mov_accion_sl = dinero_en_riesgo / 100
     mov_accion_tp = meta_ganancia / 100
     
-    if rsi_val < 50: # Sugerencia alcista
-        sl = precio_actual - mov_accion_accion_sl
-        tp = precio_actual + mov_accion_tp
-        tipo = "CALL"
-    else: # Sugerencia bajista
-        sl = precio_actual + mov_accion_sl
-        tp = precio_actual - mov_accion_tp
-        tipo = "PUT"
+    if rsi_val < 50:
+        sl, tp, tipo = precio_actual - mov_accion_sl, precio_actual + mov_accion_tp, "CALL"
+    else:
+        sl, tp, tipo = precio_actual + mov_accion_sl, precio_actual - mov_accion_tp, "PUT"
 
     col_graf, col_info = st.columns([4, 1])
     
     with col_graf:
-        st.subheader(f"Gráfico: {ticker_ind} ({v_intervalo})")
-        fig = go.Figure(data=[go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="Precio")])
-        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange')))
-        fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='purple', width=2)))
+        # Gráfico con Subplots para incluir Volumen
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.7])
         
-        # Líneas de Estrategia Basadas en Capital
-        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text=f"META (+${meta_ganancia:.2f})")
-        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text=f"STOP (-${dinero_en_riesgo:.2f})")
+        # Velas
+        fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name="Precio"), row=1, col=1)
         
-        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=650)
+        # Volumen
+        colors = ['green' if row['Open'] < row['Close'] else 'red' for _, row in data.iterrows()]
+        fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="Volumen", marker_color=colors, opacity=0.5), row=2, col=1)
+        
+        # Medias Móviles
+        fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 20), name="EMA 20", line=dict(color='orange', width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 200), name="EMA 200", line=dict(color='purple', width=2)), row=1, col=1)
+        
+        # Líneas TP/SL
+        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="GANANCIA", row=1, col=1)
+        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="STOP LOSS", row=1, col=1)
+        
+        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=750, margin=dict(l=0, r=0, t=30, b=0))
         st.plotly_chart(fig, use_container_width=True)
     
     with col_info:
         st.subheader("🎯 Plan")
         st.metric("RSI", f"{rsi_val:.2f}")
         st.write(f"Sugerencia: **{tipo}**")
+        
+        # RECUADRO DE VOLUMEN
+        st.write("---")
+        st.subheader("📊 Volumen")
+        if fuerza_volumen > 1.5:
+            st.success(f"FUERZA ALTA ({fuerza_volumen:.1f}x)")
+            st.write("✅ Los bancos están operando. Movimiento confirmado.")
+        elif fuerza_volumen > 0.8:
+            st.info(f"FUERZA NORMAL ({fuerza_volumen:.1f}x)")
+            st.write("⚖️ Volumen sano. Sigue el plan.")
+        else:
+            st.warning(f"SIN FUERZA ({fuerza_volumen:.1f}x)")
+            st.write("⚠️ Poco interés. Cuidado con señales falsas.")
+            
         st.write("---")
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
-        st.info(f"💡 Basado en **1 contrato**. Si la acción toca el SL, pierdes exactamente el 2% de tu portafolio.")
+        st.info(f"Compra: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** unidades")
 
 else:
     st.error("No hay datos suficientes.")

@@ -182,8 +182,8 @@ if not data.empty and len(data) > 15:
                 try:
                     response = model.generate_content(contexto)
                     st.write(response.text)
-                except:
-                  except Exception as e:
+                except Exception as e:
     st.error(f"Error real: {e}")
+                  
 else:
     st.error("Esperando datos...")

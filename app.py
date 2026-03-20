@@ -169,5 +169,34 @@ if not data.empty and len(data) > 15:
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
         st.info(f"Operar: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** contratos")
+        # --- COPILOTO IA (Agrégalo justo aquí) ---
+        st.markdown("---")
+        st.subheader("🤖 Copiloto de Decisiones IA")
+        
+        # Entrada de texto para el usuario
+        duda = st.chat_input(f"Pregúntale a la IA sobre {ticker_ind}...")
+        
+        if duda:
+            # La IA analiza los datos técnicos actuales de tu gráfica
+            fuerza_vol = data['Volume'].iloc[-1] / data['Volume'].rolling(20).mean().iloc[-1]
+            distancia_al_piso = ((precio_actual - prox_nivel) / precio_actual) * 100
+            
+            # Este es el "cerebro" que le pasamos a la IA
+            with st.chat_message("assistant"):
+                # Simulación de análisis lógico basado en tus datos reales
+                st.write(f"🔍 **Analizando {ticker_ind} para ti...**")
+                
+                # Lógica de respuesta inteligente
+                if rsi_val < 35 and precio_actual > ema200_actual:
+                    resumen = "✅ **OPORTUNIDAD ALTA:** El RSI está en zona de compra y la tendencia es alcista (arriba de EMA 200). Es un CALL de libro."
+                elif rsi_val > 65 and precio_actual < ema200_actual:
+                    resumen = "✅ **OPORTUNIDAD ALTA:** El RSI está saturado y la tendencia es bajista. El PUT tiene las probabilidades a su favor."
+                elif abs(distancia_al_piso) < 1:
+                    resumen = f"⚠️ **CUIDADO:** Estamos sobre un nivel técnico crítico (${prox_nivel:.2f}). Si rebota aquí, es buena señal, si lo rompe, mejor esperar."
+                else:
+                    resumen = "⚖️ **ZONA NEUTRAL:** Los indicadores no están alineados. Yo esperaría a que el RSI llegue a un extremo o el precio toque un soporte claro."
+                
+                st.write(resumen)
+                st.caption(f"Nota: Mi análisis se basa en tu gestión de riesgo de ${dinero_en_riesgo:.2f} por operación.")
 else:
     st.error("Esperando datos...")

@@ -5,36 +5,23 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-# ==========================================
-# 1. CONFIGURACIÓN E IA (BLOQUE CORREGIDO)
-# ==========================================
-genai.configure(api_key=GENAI_API_KEY)
+# --- CONFIGURACIÓN DE IA (DETECCIÓN DINÁMICA) ---
+genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 
 @st.cache_resource
 def configurar_ia():
     try:
-        # 1. Le pedimos a Google la lista de modelos que TU cuenta permite actualmente
-        modelos_disponibles = [
-            m.name for m in genai.list_models() 
-            if 'generateContent' in m.supported_generation_methods
-        ]
-        
-        # 2. Buscamos automáticamente el que contenga la palabra "flash"
-        # Si no lo encuentra, usa el primero de la lista por seguridad
-        seleccionado = next(
-            (m for m in modelos_disponibles if "flash" in m.lower()), 
-            modelos_disponibles[0]
-        )
-        
+        # Listamos los modelos disponibles para tu API Key
+        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Buscamos el que contenga 'flash', si no, usamos el primero disponible
+        seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         return genai.GenerativeModel(seleccionado)
     except Exception as e:
-        # Esto te dirá el error real si la API Key está mal o no hay internet
-        st.error(f"Error crítico de conexión con la IA: {e}")
+        st.error(f"Error de conexión con IA: {e}")
         return None
 
-# Activamos el modelo
-model_ia = configurar_ia()
+model = configurar_ia()
+
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
 
@@ -187,7 +174,6 @@ if not data.empty and len(data) > 15:
         st.info(f"Operar: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** contratos")
 
         # --- COPILOTO IA REAL ---
-    # --- COPILOTO IA REAL ---
         st.markdown("---")
         st.subheader("🤖 Copiloto IA (Gemini)")
         
@@ -205,11 +191,13 @@ if not data.empty and len(data) > 15:
             """
             
             with st.chat_message("assistant"):
-                try:
-                    response = model.generate_content(contexto)
-                    st.write(response.text)
-                except Exception as e:
-                    st.error(f"Error real: {e}")
-                  
+                if model:
+                    try:
+                        response = model.generate_content(contexto)
+                        st.write(response.text)
+                    except Exception as e:
+                        st.error(f"Error al generar respuesta: {e}")
+                else:
+                    st.error("El modelo de IA no está configurado.")
 else:
     st.error("Esperando datos...")

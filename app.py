@@ -3,6 +3,11 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import google.generativeai as genai
+
+# --- CONFIGURACIÓN DE IA (GEMINI) ---
+genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
@@ -120,6 +125,7 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 20), name="EMA 20", line=dict(color='orange', width=1)), row=1, col=1)
         
         niveles = detectar_niveles(data)
+        prox_nivel = min(niveles, key=lambda x: abs(x - precio_actual))
         for n in niveles:
             if abs(n - precio_actual) / precio_actual < 0.05:
                 fig.add_hline(y=n, line_width=0.5, line_dash="dash", line_color="gray", opacity=0.3, row=1, col=1)
@@ -130,31 +136,15 @@ if not data.empty and len(data) > 15:
         fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
         fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800)
         
-        # --- EL GRÁFICO ---
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- AQUÍ VAN LAS NOTICIAS (Debajo del gráfico) ---
-# --- BLOQUE DE NOTICIAS "BLINDADO" ---
-     # --- PLAN B: ACCESO DIRECTO A NOTICIAS REALES ---
         st.markdown("---")
         st.subheader(f"📰 Central de Noticias: {ticker_ind}")
-        
         c1, c2, c3 = st.columns(3)
-        
-        # Botón para Yahoo Finance Directo
-        link_yahoo = f"https://finance.yahoo.com/quote/{ticker_ind}/news"
-        c1.link_button(f"🌐 Ver Noticias en Yahoo", link_yahoo, use_container_width=True)
-        
-        # Botón para Google Finance (Muy rápido)
-        link_google = f"https://www.google.com/finance/quote/{ticker_ind}"
-        c2.link_button(f"🔍 Ver en Google Finance", link_google, use_container_width=True)
-        
-        # Botón para Seeking Alpha (Análisis de expertos)
-        link_sa = f"https://seekingalpha.com/symbol/{ticker_ind}"
-        c3.link_button(f"🧠 Análisis de Expertos", link_sa, use_container_width=True)
+        c1.link_button(f"🌐 Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker_ind}/news", use_container_width=True)
+        c2.link_button(f"🔍 Google Finance", f"https://www.google.com/finance/quote/{ticker_ind}", use_container_width=True)
+        c3.link_button(f"🧠 Seeking Alpha", f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
 
-        st.info(f"💡 **Consejo de Seguridad:** Haz clic en los botones para abrir las noticias de {ticker_ind} en una pestaña nueva antes de confirmar tu entrada de 2%/4%.")
-    
     with col_info:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
@@ -169,34 +159,30 @@ if not data.empty and len(data) > 15:
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
         st.info(f"Operar: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** contratos")
-        # --- COPILOTO IA (Agrégalo justo aquí) ---
+
+        # --- COPILOTO IA REAL ---
         st.markdown("---")
-        st.subheader("🤖 Copiloto de Decisiones IA")
+        st.subheader("🤖 Copiloto IA (Gemini)")
         
-        # Entrada de texto para el usuario
-        duda = st.chat_input(f"Pregúntale a la IA sobre {ticker_ind}...")
+        duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:
-            # La IA analiza los datos técnicos actuales de tu gráfica
-            fuerza_vol = data['Volume'].iloc[-1] / data['Volume'].rolling(20).mean().iloc[-1]
-            distancia_al_piso = ((precio_actual - prox_nivel) / precio_actual) * 100
+            # Contexto técnico para la IA
+            contexto = f"""
+            Eres un experto en trading. Datos de {ticker_ind}:
+            - Precio: ${precio_actual:.2f}
+            - RSI: {rsi_val:.1f}
+            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
+            - Soporte cercano: ${prox_nivel:.2f}
+            - Estrategia: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
+            Analiza basándote en estos datos y responde a: {duda}
+            """
             
-            # Este es el "cerebro" que le pasamos a la IA
             with st.chat_message("assistant"):
-                # Simulación de análisis lógico basado en tus datos reales
-                st.write(f"🔍 **Analizando {ticker_ind} para ti...**")
-                
-                # Lógica de respuesta inteligente
-                if rsi_val < 35 and precio_actual > ema200_actual:
-                    resumen = "✅ **OPORTUNIDAD ALTA:** El RSI está en zona de compra y la tendencia es alcista (arriba de EMA 200). Es un CALL de libro."
-                elif rsi_val > 65 and precio_actual < ema200_actual:
-                    resumen = "✅ **OPORTUNIDAD ALTA:** El RSI está saturado y la tendencia es bajista. El PUT tiene las probabilidades a su favor."
-                elif abs(distancia_al_piso) < 1:
-                    resumen = f"⚠️ **CUIDADO:** Estamos sobre un nivel técnico crítico (${prox_nivel:.2f}). Si rebota aquí, es buena señal, si lo rompe, mejor esperar."
-                else:
-                    resumen = "⚖️ **ZONA NEUTRAL:** Los indicadores no están alineados. Yo esperaría a que el RSI llegue a un extremo o el precio toque un soporte claro."
-                
-                st.write(resumen)
-                st.caption(f"Nota: Mi análisis se basa en tu gestión de riesgo de ${dinero_en_riesgo:.2f} por operación.")
+                try:
+                    response = model.generate_content(contexto)
+                    st.write(response.text)
+                except:
+                    st.error("Revisa tu conexión o API Key.")
 else:
     st.error("Esperando datos...")

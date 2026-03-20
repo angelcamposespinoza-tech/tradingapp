@@ -35,7 +35,9 @@ def calcular_ema(series, span):
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
-pct_riesgo = st.sidebar.slider("% Máximo a perder por trade", 1.0, 5.0, 2.0) / 100
+# Esta es la barra que ahora sí controla la distancia de las líneas en la gráfica:
+pct_riesgo_val = st.sidebar.slider("% Máximo a perder por trade", 0.5, 10.0, 2.0)
+pct_riesgo = pct_riesgo_val / 100
 dinero_en_riesgo = capital_total * pct_riesgo
 
 st.sidebar.header("📋 Configuración de Opciones")
@@ -104,17 +106,18 @@ if not data.empty and len(data) > 15:
     data['EMA_20'] = calcular_ema(data['Close'], 20)
     data['EMA_200'] = calcular_ema(data['Close'], 200)
 
-    # Cálculo automático de Stop Loss (basado en volatilidad reciente)
-    volatilidad = data['High'].iloc[-10:].max() - data['Low'].iloc[-10:].min()
-    distancia_sl = volatilidad * 0.6 # Ajuste de sensibilidad
+    # NUEVA LÓGICA DE RIESGO: El Stop Loss se calcula basado en el % que elegiste
+    # Distancia en dinero basada en el % de riesgo sobre el precio actual
+    distancia_sl = precio_actual * pct_riesgo
     
-    if rsi_val < 40: # Lógica para CALL
+    # Determinar si sugerimos CALL o PUT para dibujar las líneas
+    if rsi_val < 50: # Sesgo Alcista (CALL)
         sl = precio_actual - distancia_sl
-        tp = precio_actual + (distancia_sl * 2)
+        tp = precio_actual + (distancia_sl * 2) # Ratio 2:1
         tipo = "CALL"
-    else: # Lógica para PUT
+    else: # Sesgo Bajista (PUT)
         sl = precio_actual + distancia_sl
-        tp = precio_actual - (distancia_sl * 2)
+        tp = precio_actual - (distancia_sl * 2) # Ratio 2:1
         tipo = "PUT"
 
     col_graf, col_info = st.columns([4, 1])
@@ -125,7 +128,7 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange')))
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='purple', width=2)))
         
-        # Líneas de Riesgo
+        # Líneas de Riesgo dinámicas
         fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="GANANCIA (TP)")
         fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="PÉRDIDA (SL)")
         
@@ -137,12 +140,14 @@ if not data.empty and len(data) > 15:
         st.metric("RSI", f"{rsi_val:.2f}")
         st.write(f"**Sugerencia:** {tipo}")
         st.write("---")
+        st.write(f"Riesgo x Trade: **${dinero_en_riesgo:.2f}**")
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
         
-        riesgo_unidad = abs(precio_actual - sl)
-        cantidad = int(dinero_en_riesgo / riesgo_unidad) if riesgo_unidad > 0 else 0
-        st.info(f"Compra: **{cantidad}** unidades para arriesgar solo **${dinero_en_riesgo:.2f}**")
+        # Cálculo de cantidad de acciones
+        distancia_puntos = abs(precio_actual - sl)
+        cantidad = int(dinero_en_riesgo / distancia_puntos) if distancia_puntos > 0 else 0
+        st.info(f"Compra: **{cantidad}** unidades")
 
 else:
     st.error("No hay datos suficientes para graficar.")

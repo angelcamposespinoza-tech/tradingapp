@@ -111,7 +111,7 @@ for i, res in enumerate(datos_resumen):
 
 st.markdown("---")
 
-# 3. ANÁLISIS DETALLADO
+# 3. ANÁLISIS DETALLADO (REEMPLAZA DESDE AQUÍ HASTA EL FINAL)
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 data = yf.download(ticker_ind, period=v_periodo, interval=v_intervalo, progress=False)
@@ -130,6 +130,7 @@ if not data.empty and len(data) > 15:
     else:
         sl, tp = precio_actual + mov_sl, precio_actual - mov_tp
 
+    # --- FILA 1: GRÁFICO Y MINI PANEL ---
     col_graf, col_info = st.columns([4, 1])
     with col_graf:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.7])
@@ -147,57 +148,45 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="Volumen", marker_color=v_colors, opacity=0.4), row=2, col=1)
         fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
         fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
-        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=800)
-        
+        fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600)
         st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader(f"📰 Central de Noticias: {ticker_ind}")
-        c1, c2, c3 = st.columns(3)
-        c1.link_button(f"🌐 Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker_ind}/news", use_container_width=True)
-        c2.link_button(f"🔍 Google Finance", f"https://www.google.com/finance/quote/{ticker_ind}", use_container_width=True)
-        c3.link_button(f"🧠 Seeking Alpha", f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
 
     with col_info:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
-        
         if precio_actual > ema200_actual:
-            st.success("📈 TENDENCIA ALCISTA")
+            st.success("📈 ALCISTA")
         else:
-            st.error("📉 TENDENCIA BAJISTA")
-        
+            st.error("📉 BAJISTA")
         st.write("---")
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
-        st.info(f"Operar: **{int(dinero_en_riesgo/(abs(precio_actual-sl)))}** contratos")
 
-        # --- COPILOTO IA REAL ---
-        st.markdown("---")
-        st.subheader("🤖 Copiloto IA (Gemini)")
-        
+    # --- FILA 2: NOTICIAS (ANCHO COMPLETO) ---
+    st.markdown("---")
+    st.subheader(f"📰 Central de Noticias: {ticker_ind}")
+    c1, c2, c3 = st.columns(3)
+    c1.link_button(f"🌐 Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker_ind}/news", use_container_width=True)
+    c2.link_button(f"🔍 Google Finance", f"https://www.google.com/finance/quote/{ticker_ind}", use_container_width=True)
+    c3.link_button(f"🧠 Seeking Alpha", f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
+
+    # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
+    st.markdown("---")
+    with st.container():
+        st.subheader("🤖 Copiloto IA - Análisis de Pantalla Completa")
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:
-            contexto = f"""
-            Eres un experto en trading. Datos de {ticker_ind}:
-            - Precio: ${precio_actual:.2f}
-            - RSI: {rsi_val:.1f}
-            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
-            - Soporte cercano: ${prox_nivel:.2f}
-            - Estrategia: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
-            Analiza basándote en estos datos y responde a: {duda}
-            """
-            
+            contexto = f"Analiza {ticker_ind}: Precio ${precio_actual:.2f}, RSI {rsi_val:.1f}, Tendencia {'ALCISTA' if precio_actual > ema200_actual else 'BAJISTA'}. Pregunta: {duda}"
             with st.chat_message("assistant"):
                 if model:
                     try:
                         response = model.generate_content(contexto)
                         st.write(response.text)
                     except Exception as e:
-                        st.error(f"Error al generar respuesta: {e}")
+                        st.error(f"Error: {e}")
                 else:
-                    st.error("El modelo de IA no está configurado.")
+                    st.error("IA no configurada.")
 else:
     st.error("Esperando datos...")

@@ -134,26 +134,31 @@ if not data.empty and len(data) > 15:
         st.plotly_chart(fig, use_container_width=True)
 
         # --- AQUÍ VAN LAS NOTICIAS (Debajo del gráfico) ---
-       # --- BLOQUE DE NOTICIAS MEJORADO ---
+# --- BLOQUE DE NOTICIAS "BLINDADO" ---
         st.markdown("---")
-        st.subheader(f"📰 Noticias de {ticker_ind}")
+        st.subheader(f"📰 Noticias de Último Minuto: {ticker_ind}")
         
         try:
-            ticker_obj = yf.Ticker(ticker_ind)
-            # Intentamos obtener las noticias
-            news_list = ticker_obj.get_news() 
+            # Creamos el objeto ticker
+            meta_ticker = yf.Ticker(ticker_ind)
+            # Usamos .news que es la forma más directa
+            noticias = meta_ticker.news
             
-            if news_list and len(news_list) > 0:
-                for item in news_list[:5]: # Solo las primeras 5
-                    # Usamos un identificador único para el expander
-                    with st.expander(f"📌 {item.get('title', 'Noticia sin título')}"):
-                        st.write(f"**Fuente:** {item.get('publisher', 'Desconocida')}")
-                        link = item.get('link', '#')
-                        st.markdown(f"[Leer noticia completa]({link})")
+            if noticias and len(noticias) > 0:
+                for n in noticias[:5]:
+                    titulo = n.get('title', 'Noticia sin título')
+                    fuente = n.get('publisher', 'Fuente desconocida')
+                    enlace = n.get('link', '#')
+                    # Usamos una estructura más limpia
+                    with st.expander(f"⭐ {titulo}"):
+                        st.write(f"**Publicado por:** {fuente}")
+                        st.markdown(f"🔗 [Abrir noticia en Yahoo Finance]({enlace})")
             else:
-                st.warning(f"No hay noticias disponibles para {ticker_ind} en este momento.")
+                # Si Yahoo no responde, intentamos un mensaje de ayuda
+                st.info(f"🔎 No hay noticias recientes en Yahoo para {ticker_ind}. Intenta revisar directamente en Google Finance mientras se restablece la conexión.")
+        
         except Exception as e:
-            st.error("⚠️ Error de conexión con el servidor de noticias. Reintenta en unos segundos.")
+            st.error("⚠️ El servidor de noticias está ocupado. Intenta cambiar de Ticker y regresar para refrescar la conexión.")
     
     with col_info:
         st.subheader("🎯 Señal")

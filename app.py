@@ -134,20 +134,26 @@ if not data.empty and len(data) > 15:
         st.plotly_chart(fig, use_container_width=True)
 
         # --- AQUÍ VAN LAS NOTICIAS (Debajo del gráfico) ---
+       # --- BLOQUE DE NOTICIAS MEJORADO ---
         st.markdown("---")
-        st.subheader(f"📰 Últimas Noticias: {ticker_ind}")
+        st.subheader(f"📰 Noticias de {ticker_ind}")
+        
         try:
             ticker_obj = yf.Ticker(ticker_ind)
-            news = ticker_obj.news[:5] 
-            if news:
-                for item in news:
-                    with st.expander(f"📌 {item['title']}"):
-                        st.write(f"**Fuente:** {item['publisher']}")
-                        st.write(f"[Leer noticia completa]({item['link']})")
+            # Intentamos obtener las noticias
+            news_list = ticker_obj.get_news() 
+            
+            if news_list and len(news_list) > 0:
+                for item in news_list[:5]: # Solo las primeras 5
+                    # Usamos un identificador único para el expander
+                    with st.expander(f"📌 {item.get('title', 'Noticia sin título')}"):
+                        st.write(f"**Fuente:** {item.get('publisher', 'Desconocida')}")
+                        link = item.get('link', '#')
+                        st.markdown(f"[Leer noticia completa]({link})")
             else:
-                st.write("No hay noticias recientes disponibles.")
-        except:
-            st.write("Error al cargar noticias.")
+                st.warning(f"No hay noticias disponibles para {ticker_ind} en este momento.")
+        except Exception as e:
+            st.error("⚠️ Error de conexión con el servidor de noticias. Reintenta en unos segundos.")
     
     with col_info:
         st.subheader("🎯 Señal")

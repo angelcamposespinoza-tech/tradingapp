@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
 
-# ESTILOS: Recuadros negros con texto blanco puro
+# ESTILOS
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -35,19 +35,21 @@ def calcular_ema(series, span):
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
-# Esta es la barra que ahora sí controla la distancia de las líneas en la gráfica:
-pct_riesgo_val = st.sidebar.slider("% Máximo a perder por trade", 0.5, 10.0, 2.0)
-pct_riesgo = pct_riesgo_val / 100
-dinero_en_riesgo = capital_total * pct_riesgo
 
-st.sidebar.header("📋 Configuración de Opciones")
+# Riesgo fijo al 2%
+RIESGO_FIJO = 0.02 
+dinero_en_riesgo = capital_total * RIESGO_FIJO
+
+st.sidebar.info(f"Riesgo automático (2%): **${dinero_en_riesgo:.2f}**")
+
+st.sidebar.header("📋 Configuración")
 dias_vencimiento = st.sidebar.selectbox(
     "¿Cuándo vence tu opción?",
     ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"),
     index=0
 )
 
-# Lógica automática de temporalidad
+# Lógica de tiempos
 tiempos = {
     "Hoy (0DTE)": ("1m", "1d"),
     "1 a 3 días": ("5m", "5d"),
@@ -61,7 +63,7 @@ nuevos_tickers = st.sidebar.text_input("Agregar Tickers (ej: COIN, MSTR)", value
 EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
 
-st.title("🚀 Smart Scanner: Gestión y Tendencia")
+st.title("🚀 Smart Scanner: Estrategia 2%")
 
 # 2. MONITOR DE SEÑALES (ARRIBA)
 @st.cache_data(ttl=60)
@@ -92,7 +94,7 @@ for i, res in enumerate(datos_resumen):
 
 st.markdown("---")
 
-# 3. ANÁLISIS DETALLADO Y CALCULADORA DE RIESGO
+# 3. ANÁLISIS DETALLADO Y ESTRATEGIA
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 
@@ -106,18 +108,16 @@ if not data.empty and len(data) > 15:
     data['EMA_20'] = calcular_ema(data['Close'], 20)
     data['EMA_200'] = calcular_ema(data['Close'], 200)
 
-    # NUEVA LÓGICA DE RIESGO: El Stop Loss se calcula basado en el % que elegiste
-    # Distancia en dinero basada en el % de riesgo sobre el precio actual
-    distancia_sl = precio_actual * pct_riesgo
+    # El Stop Loss siempre será el 2% del valor del activo
+    distancia_puntos = precio_actual * RIESGO_FIJO
     
-    # Determinar si sugerimos CALL o PUT para dibujar las líneas
-    if rsi_val < 50: # Sesgo Alcista (CALL)
-        sl = precio_actual - distancia_sl
-        tp = precio_actual + (distancia_sl * 2) # Ratio 2:1
+    if rsi_val < 50: # Sesgo alcista
+        sl = precio_actual - distancia_puntos
+        tp = precio_actual + (distancia_puntos * 2)
         tipo = "CALL"
-    else: # Sesgo Bajista (PUT)
-        sl = precio_actual + distancia_sl
-        tp = precio_actual - (distancia_sl * 2) # Ratio 2:1
+    else: # Sesgo bajista
+        sl = precio_actual + distancia_puntos
+        tp = precio_actual - (distancia_puntos * 2)
         tipo = "PUT"
 
     col_graf, col_info = st.columns([4, 1])
@@ -128,9 +128,9 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange')))
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='purple', width=2)))
         
-        # Líneas de Riesgo dinámicas
-        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="GANANCIA (TP)")
-        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="PÉRDIDA (SL)")
+        # Líneas de Estrategia
+        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP (Ganas el 4%)")
+        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL (Pierdes el 2%)")
         
         fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=650)
         st.plotly_chart(fig, use_container_width=True)
@@ -138,16 +138,14 @@ if not data.empty and len(data) > 15:
     with col_info:
         st.subheader("🎯 Plan")
         st.metric("RSI", f"{rsi_val:.2f}")
-        st.write(f"**Sugerencia:** {tipo}")
+        st.write(f"Sugerencia: **{tipo}**")
         st.write("---")
-        st.write(f"Riesgo x Trade: **${dinero_en_riesgo:.2f}**")
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
         
-        # Cálculo de cantidad de acciones
-        distancia_puntos = abs(precio_actual - sl)
+        # Cantidad de unidades para cumplir el riesgo monetario
         cantidad = int(dinero_en_riesgo / distancia_puntos) if distancia_puntos > 0 else 0
-        st.info(f"Compra: **{cantidad}** unidades")
+        st.info(f"Operar: **{cantidad}** unidades")
 
 else:
-    st.error("No hay datos suficientes para graficar.")
+    st.error("No hay datos suficientes.")

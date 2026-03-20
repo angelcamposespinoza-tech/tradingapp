@@ -21,7 +21,7 @@ def configurar_ia():
 model = configurar_ia()
 
 # 1. Configuración de la página
-st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Scanner Superior - Ángel", layout="wide", page_icon="📈")
 
 # ESTILOS: Ajuste de colores para máxima legibilidad
 st.markdown("""
@@ -76,10 +76,10 @@ tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": 
 v_intervalo, v_periodo = tiempos[dias_vencimiento]
 
 nuevos_tickers = st.sidebar.text_input("Agregar Tickers", value="").upper()
-EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
+EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "SPY"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
 
-st.title("🚀 Smart Scanner: Estrategia Pro 2%/4%")
+st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES (ARRIBA)
 @st.cache_data(ttl=60)

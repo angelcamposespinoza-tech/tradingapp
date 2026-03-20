@@ -11,9 +11,7 @@ genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 @st.cache_resource
 def configurar_ia():
     try:
-        # Listamos los modelos disponibles para tu API Key
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # Buscamos el que contenga 'flash', si no, usamos el primero disponible
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         return genai.GenerativeModel(seleccionado)
     except Exception as e:
@@ -111,7 +109,7 @@ for i, res in enumerate(datos_resumen):
 
 st.markdown("---")
 
-# 3. ANÁLISIS DETALLADO (REEMPLAZA DESDE AQUÍ HASTA EL FINAL)
+# 3. ANÁLISIS DETALLADO
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 data = yf.download(ticker_ind, period=v_periodo, interval=v_intervalo, progress=False)
@@ -175,23 +173,27 @@ if not data.empty and len(data) > 15:
     st.markdown("---")
     with st.container():
         st.subheader("🤖 Copiloto IA - Análisis de Pantalla Completa")
+        
+        # Obtenemos noticias para la IA
+        try:
+            raw_news = yf.Ticker(ticker_ind).news
+            resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
+        except:
+            resumen_noticias = "No se pudieron cargar noticias."
+
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-      if duda:
-            # Ahora incluimos la variable 'dias_vencimiento' que viene de tu barra lateral
+        if duda:
             contexto = f"""
-            Eres un experto en opciones financieras y Lean Six Sigma. 
-            Analiza {ticker_ind} con estos datos:
+            Eres un experto en opciones financieras y Lean Six Sigma. Analiza {ticker_ind}:
             - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
             - Soporte: ${prox_nivel:.2f}
-            - ESTRATEGIA DE TIEMPO: El usuario operará con vencimiento a {dias_vencimiento}.
-            - Gestión: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
-            
+            - ESTRATEGIA DE TIEMPO: Vencimiento a {dias_vencimiento}.
+            - NOTICIAS: {resumen_noticias}
+            - GESTIÓN: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
+
             Pregunta: {duda}
-            
-            NOTA: Si el vencimiento es 'Hoy (0DTE)', sé más estricto con las señales de scalping. 
-            Si es '1 mes o más', prioriza la tendencia de la EMA 200.
             """
             
             with st.chat_message("assistant"):
@@ -201,5 +203,7 @@ if not data.empty and len(data) > 15:
                         st.write(response.text)
                     except Exception as e:
                         st.error(f"Error: {e}")
+                else:
+                    st.error("IA no configurada.")
 else:
     st.error("Esperando datos...")

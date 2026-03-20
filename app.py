@@ -135,30 +135,25 @@ if not data.empty and len(data) > 15:
 
         # --- AQUÍ VAN LAS NOTICIAS (Debajo del gráfico) ---
 # --- BLOQUE DE NOTICIAS "BLINDADO" ---
+     # --- PLAN B: ACCESO DIRECTO A NOTICIAS REALES ---
         st.markdown("---")
-        st.subheader(f"📰 Noticias de Último Minuto: {ticker_ind}")
+        st.subheader(f"📰 Central de Noticias: {ticker_ind}")
         
-        try:
-            # Creamos el objeto ticker
-            meta_ticker = yf.Ticker(ticker_ind)
-            # Usamos .news que es la forma más directa
-            noticias = meta_ticker.news
-            
-            if noticias and len(noticias) > 0:
-                for n in noticias[:5]:
-                    titulo = n.get('title', 'Noticia sin título')
-                    fuente = n.get('publisher', 'Fuente desconocida')
-                    enlace = n.get('link', '#')
-                    # Usamos una estructura más limpia
-                    with st.expander(f"⭐ {titulo}"):
-                        st.write(f"**Publicado por:** {fuente}")
-                        st.markdown(f"🔗 [Abrir noticia en Yahoo Finance]({enlace})")
-            else:
-                # Si Yahoo no responde, intentamos un mensaje de ayuda
-                st.info(f"🔎 No hay noticias recientes en Yahoo para {ticker_ind}. Intenta revisar directamente en Google Finance mientras se restablece la conexión.")
+        c1, c2, c3 = st.columns(3)
         
-        except Exception as e:
-            st.error("⚠️ El servidor de noticias está ocupado. Intenta cambiar de Ticker y regresar para refrescar la conexión.")
+        # Botón para Yahoo Finance Directo
+        link_yahoo = f"https://finance.yahoo.com/quote/{ticker_ind}/news"
+        c1.link_button(f"🌐 Ver Noticias en Yahoo", link_yahoo, use_container_width=True)
+        
+        # Botón para Google Finance (Muy rápido)
+        link_google = f"https://www.google.com/finance/quote/{ticker_ind}"
+        c2.link_button(f"🔍 Ver en Google Finance", link_google, use_container_width=True)
+        
+        # Botón para Seeking Alpha (Análisis de expertos)
+        link_sa = f"https://seekingalpha.com/symbol/{ticker_ind}"
+        c3.link_button(f"🧠 Análisis de Expertos", link_sa, use_container_width=True)
+
+        st.info(f"💡 **Consejo de Seguridad:** Haz clic en los botones para abrir las noticias de {ticker_ind} en una pestaña nueva antes de confirmar tu entrada de 2%/4%.")
     
     with col_info:
         st.subheader("🎯 Señal")

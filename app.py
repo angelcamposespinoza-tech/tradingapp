@@ -177,8 +177,23 @@ if not data.empty and len(data) > 15:
         st.subheader("🤖 Copiloto IA - Análisis de Pantalla Completa")
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-        if duda:
-            contexto = f"Analiza {ticker_ind}: Precio ${precio_actual:.2f}, RSI {rsi_val:.1f}, Tendencia {'ALCISTA' if precio_actual > ema200_actual else 'BAJISTA'}. Pregunta: {duda}"
+      if duda:
+            # Ahora incluimos la variable 'dias_vencimiento' que viene de tu barra lateral
+            contexto = f"""
+            Eres un experto en opciones financieras y Lean Six Sigma. 
+            Analiza {ticker_ind} con estos datos:
+            - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
+            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
+            - Soporte: ${prox_nivel:.2f}
+            - ESTRATEGIA DE TIEMPO: El usuario operará con vencimiento a {dias_vencimiento}.
+            - Gestión: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
+            
+            Pregunta: {duda}
+            
+            NOTA: Si el vencimiento es 'Hoy (0DTE)', sé más estricto con las señales de scalping. 
+            Si es '1 mes o más', prioriza la tendencia de la EMA 200.
+            """
+            
             with st.chat_message("assistant"):
                 if model:
                     try:
@@ -186,7 +201,5 @@ if not data.empty and len(data) > 15:
                         st.write(response.text)
                     except Exception as e:
                         st.error(f"Error: {e}")
-                else:
-                    st.error("IA no configurada.")
 else:
     st.error("Esperando datos...")

@@ -183,6 +183,7 @@ if not data.empty and len(data) > 15:
                     response = model.generate_content(contexto)
                     st.write(response.text)
                 except:
-                    st.error("Revisa tu conexión o API Key.")
+                  except Exception as e:
+    st.error(f"Error real: {e}")
 else:
     st.error("Esperando datos...")

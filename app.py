@@ -172,7 +172,7 @@ if not data.empty and len(data) > 15:
     # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
     st.markdown("---")
     with st.container():
-        st.subheader("🤖 Copiloto IA - Análisis de Pantalla Completa")
+        st.subheader("🤖 Pregúntame tus dudas")
         
         # Obtenemos noticias para la IA
         try:

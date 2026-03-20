@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 # 1. Configuración de la página
 st.set_page_config(page_title="Scanner Pro - Ángel", layout="wide", page_icon="📈")
 
-# ESTILOS
+# ESTILOS: Recuadros negros con texto blanco puro
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -36,11 +36,12 @@ def calcular_ema(series, span):
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
 
-# Riesgo fijo al 2%
-RIESGO_FIJO = 0.02 
-dinero_en_riesgo = capital_total * RIESGO_FIJO
+# REGLA DE ORO: 2% Riesgo / 4% Ganancia sobre el CAPITAL TOTAL
+dinero_en_riesgo = capital_total * 0.02
+meta_ganancia = capital_total * 0.04
 
-st.sidebar.info(f"Riesgo automático (2%): **${dinero_en_riesgo:.2f}**")
+st.sidebar.info(f"Riesgo Máximo (2%): **${dinero_en_riesgo:.2f}**")
+st.sidebar.success(f"Meta Ganancia (4%): **${meta_ganancia:.2f}**")
 
 st.sidebar.header("📋 Configuración")
 dias_vencimiento = st.sidebar.selectbox(
@@ -63,7 +64,7 @@ nuevos_tickers = st.sidebar.text_input("Agregar Tickers (ej: COIN, MSTR)", value
 EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "BTC-USD"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
 
-st.title("🚀 Smart Scanner: Estrategia 2%")
+st.title("🚀 Smart Scanner: Estrategia de Portafolio 2%/4%")
 
 # 2. MONITOR DE SEÑALES (ARRIBA)
 @st.cache_data(ttl=60)
@@ -94,7 +95,7 @@ for i, res in enumerate(datos_resumen):
 
 st.markdown("---")
 
-# 3. ANÁLISIS DETALLADO Y ESTRATEGIA
+# 3. ANÁLISIS DETALLADO Y ESTRATEGIA MATEMÁTICA
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
 
@@ -108,16 +109,19 @@ if not data.empty and len(data) > 15:
     data['EMA_20'] = calcular_ema(data['Close'], 20)
     data['EMA_200'] = calcular_ema(data['Close'], 200)
 
-    # El Stop Loss siempre será el 2% del valor del activo
-    distancia_puntos = precio_actual * RIESGO_FIJO
+    # --- CÁLCULO PARA OPCIONES (1 Contrato = 100 acciones) ---
+    # Calculamos cuánto debe moverse la ACCIÓN para que perdamos/ganemos el % del CAPITAL TOTAL
+    # con 1 solo contrato.
+    mov_accion_sl = dinero_en_riesgo / 100
+    mov_accion_tp = meta_ganancia / 100
     
-    if rsi_val < 50: # Sesgo alcista
-        sl = precio_actual - distancia_puntos
-        tp = precio_actual + (distancia_puntos * 2)
+    if rsi_val < 50: # Sugerencia alcista
+        sl = precio_actual - mov_accion_accion_sl
+        tp = precio_actual + mov_accion_tp
         tipo = "CALL"
-    else: # Sesgo bajista
-        sl = precio_actual + distancia_puntos
-        tp = precio_actual - (distancia_puntos * 2)
+    else: # Sugerencia bajista
+        sl = precio_actual + mov_accion_sl
+        tp = precio_actual - mov_accion_tp
         tipo = "PUT"
 
     col_graf, col_info = st.columns([4, 1])
@@ -128,9 +132,9 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_20'], name="EMA 20", line=dict(color='orange')))
         fig.add_trace(go.Scatter(x=data.index, y=data['EMA_200'], name="EMA 200", line=dict(color='purple', width=2)))
         
-        # Líneas de Estrategia
-        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP (Ganas el 4%)")
-        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL (Pierdes el 2%)")
+        # Líneas de Estrategia Basadas en Capital
+        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text=f"META (+${meta_ganancia:.2f})")
+        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text=f"STOP (-${dinero_en_riesgo:.2f})")
         
         fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=650)
         st.plotly_chart(fig, use_container_width=True)
@@ -142,10 +146,7 @@ if not data.empty and len(data) > 15:
         st.write("---")
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
-        
-        # Cantidad de unidades para cumplir el riesgo monetario
-        cantidad = int(dinero_en_riesgo / distancia_puntos) if distancia_puntos > 0 else 0
-        st.info(f"Operar: **{cantidad}** unidades")
+        st.info(f"💡 Basado en **1 contrato**. Si la acción toca el SL, pierdes exactamente el 2% de tu portafolio.")
 
 else:
     st.error("No hay datos suficientes.")

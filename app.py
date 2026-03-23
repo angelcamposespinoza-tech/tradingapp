@@ -14,11 +14,19 @@ def configurar_ia():
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         
-
-      # Alternativa simplificada para versiones nuevas
+# IMPORTANTE: No usamos texto, usamos la estructura de objeto que Google pide
+        from google.generativeai import protos
+        
         return genai.GenerativeModel(
             model_name=seleccionado,
-            tools="google_search" 
+            tools=[{
+                "google_search_retrieval": {
+                    "dynamic_retrieval_config": {
+                        "mode": "unspecified",
+                        "dynamic_threshold": 0.06
+                    }
+                }
+            }]
         )
     except Exception as e:
         st.error(f"Error de conexión con IA: {e}")

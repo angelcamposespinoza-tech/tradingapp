@@ -15,9 +15,10 @@ def configurar_ia():
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         
   # ACTIVAMOS LA HERRAMIENTA DE BÚSQUEDA DE GOOGLE (FORMATO CORRECTO)
+     # IMPORTANTE: Usamos el formato de objeto directo para evitar el error 400
         return genai.GenerativeModel(
             model_name=seleccionado,
-            tools=[{"google_search_retrieval": {}}] 
+            tools=[genai.create_tool(google_search_retrieval=genai.protos.GoogleSearchRetrieval())]
         )
     except Exception as e:
         st.error(f"Error de conexión con IA: {e}")

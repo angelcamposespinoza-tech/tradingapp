@@ -14,10 +14,10 @@ def configurar_ia():
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         
-        # ACTIVAMOS LA HERRAMIENTA DE BÚSQUEDA DE GOOGLE
+    # ACTIVAMOS LA HERRAMIENTA DE BÚSQUEDA DE GOOGLE ACTUALIZADA
         return genai.GenerativeModel(
             model_name=seleccionado,
-            tools=[{"google_search_retrieval": {}}] 
+            tools=[{"google_search": {}}] 
         )
     except Exception as e:
         st.error(f"Error de conexión con IA: {e}")

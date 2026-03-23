@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE IA (DETECCIÓN DINÁMICA) ---
+# --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 
 @st.cache_resource
@@ -13,7 +13,12 @@ def configurar_ia():
     try:
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
-        return genai.GenerativeModel(seleccionado)
+        
+        # ACTIVAMOS LA HERRAMIENTA DE BÚSQUEDA DE GOOGLE
+        return genai.GenerativeModel(
+            model_name=seleccionado,
+            tools=[{"google_search_retrieval": {}}] 
+        )
     except Exception as e:
         st.error(f"Error de conexión con IA: {e}")
         return None

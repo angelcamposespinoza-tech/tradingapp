@@ -9,25 +9,20 @@ import google.generativeai as genai
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 
 @st.cache_resource
+@st.cache_resource
 def configurar_ia():
     try:
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         seleccionado = next((m for m in modelos if "flash" in m.lower()), modelos[0])
         
-# IMPORTANTE: No usamos texto, usamos la estructura de objeto que Google pide
-        from google.generativeai import protos
-        
-        return genai.GenerativeModel(
-            model_name=seleccionado,
-            tools=[{
-                "google_search_retrieval": {
-                    "dynamic_retrieval_config": {
-                        "mode": "unspecified",
-                        "dynamic_threshold": 0.06
-                    }
-                }
-            }]
-        )
+        # Intentamos activar la búsqueda, si falla por cuota, cargamos el modelo normal
+        try:
+            return genai.GenerativeModel(
+                model_name=seleccionado,
+                tools=[{"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "unspecified", "dynamic_threshold": 0.06}}}]
+            )
+        except:
+            return genai.GenerativeModel(seleccionado)
     except Exception as e:
         st.error(f"Error de conexión con IA: {e}")
         return None
@@ -195,31 +190,28 @@ if not data.empty and len(data) > 15:
         except:
             resumen_noticias = "No se pudieron cargar noticias."
 
+      # --- BLOQUE DE CHAT CORREGIDO ---
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-if duda:
-            # El prompt ahora le ordena a Gemini buscar en internet
+        if duda:
             contexto = f"""
-            INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
-            
-            DATOS TÉCNICOS ACTUALES:
-            - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
-            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
-            - Soporte: ${prox_nivel:.2f}
-            - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
-            
-            TAREA: Analiza si las noticias de internet apoyan o contradicen la señal técnica y responde: {duda}
+            INVESTIGACIÓN: Usa Google Search si es posible para noticias de {ticker_ind}.
+            DATOS: Precio ${precio_actual:.2f}, RSI {rsi_val:.1f}, Tendencia {'ALCISTA' if precio_actual > ema200_actual else 'BAJISTA'}.
+            Estrategia: Vencimiento {dias_vencimiento}, Riesgo 2%, Meta 4%.
+            Pregunta: {duda}
             """
             
             with st.chat_message("assistant"):
                 if model:
                     try:
-                        # La IA navegará automáticamente para responder
                         response = model.generate_content(contexto)
                         st.write(response.text)
                     except Exception as e:
-                        st.error(f"Error: {e}")
-                else:
-                    st.error("IA no configurada.")
-else:
-    st.error("Esperando datos...")
+                        if "429" in str(e) or "quota" in str(e).lower():
+                            st.warning("⚠️ Cuota de búsqueda excedida. Te respondo solo con datos técnicos:")
+                            # Reintento sin herramientas de búsqueda
+                            model_simple = genai.GenerativeModel('gemini-1.5-flash')
+                            res_simple = model_simple.generate_content(contexto)
+                            st.write(res_simple.text)
+                        else:
+                            st.error(f"Error: {e}")

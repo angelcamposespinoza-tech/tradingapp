@@ -188,22 +188,24 @@ if not data.empty and len(data) > 15:
 
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-        if duda:
+if duda:
+            # El prompt ahora le ordena a Gemini buscar en internet
             contexto = f"""
-            Eres un experto en opciones financieras y Lean Six Sigma. Analiza {ticker_ind}:
+            INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
+            
+            DATOS TÉCNICOS ACTUALES:
             - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
             - Soporte: ${prox_nivel:.2f}
-            - ESTRATEGIA DE TIEMPO: Vencimiento a {dias_vencimiento}.
-            - NOTICIAS: {resumen_noticias}
-            - GESTIÓN: 2% riesgo (${dinero_en_riesgo:.2f}), 4% meta.
-
-            Pregunta: {duda}
+            - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
+            
+            TAREA: Analiza si las noticias de internet apoyan o contradicen la señal técnica y responde: {duda}
             """
             
             with st.chat_message("assistant"):
                 if model:
                     try:
+                        # La IA navegará automáticamente para responder
                         response = model.generate_content(contexto)
                         st.write(response.text)
                     except Exception as e:

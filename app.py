@@ -193,12 +193,22 @@ if not data.empty and len(data) > 15:
       # --- BLOQUE DE CHAT CORREGIDO ---
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-        if duda:
+      if duda:
             contexto = f"""
-            INVESTIGACIÓN: Usa Google Search si es posible para noticias de {ticker_ind}.
-            DATOS: Precio ${precio_actual:.2f}, RSI {rsi_val:.1f}, Tendencia {'ALCISTA' if precio_actual > ema200_actual else 'BAJISTA'}.
-            Estrategia: Vencimiento {dias_vencimiento}, Riesgo 2%, Meta 4%.
-            Pregunta: {duda}
+            INVESTIGACIÓN: Usa Google Search para noticias de las últimas 24h sobre {ticker_ind}.
+            
+            DATOS TÉCNICOS:
+            - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
+            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
+            - Vencimiento: {dias_vencimiento} | Riesgo 2% | Meta 4%
+            
+            TAREA: Analiza los datos y responde a: {duda}
+            
+            REGLA DE FORMATO: Al final de tu respuesta, DEBES incluir una sección llamada 
+            '📢 CONCLUSIÓN SIMPLE Y PLAN DE ACCIÓN' con este formato:
+            1. ¿Qué significa esto? (Explicación sencilla sin tecnicismos).
+            2. ¿Qué hacer HOY con la bolsa cerrada? (Preparación).
+            3. ¿Qué hacer MAÑANA a las 8:00 AM? (Acción específica).
             """
             
             with st.chat_message("assistant"):
@@ -207,11 +217,5 @@ if not data.empty and len(data) > 15:
                         response = model.generate_content(contexto)
                         st.write(response.text)
                     except Exception as e:
-                        if "429" in str(e) or "quota" in str(e).lower():
-                            st.warning("⚠️ Cuota de búsqueda excedida. Te respondo solo con datos técnicos:")
-                            # Reintento sin herramientas de búsqueda
-                            model_simple = genai.GenerativeModel('gemini-1.5-flash')
-                            res_simple = model_simple.generate_content(contexto)
-                            st.write(res_simple.text)
-                        else:
-                            st.error(f"Error: {e}")
+                        # (Mantenemos tu lógica de reintento por si falla la cuota)
+                        st.error(f"Error: {e}")

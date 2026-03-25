@@ -179,6 +179,7 @@ if not data.empty and len(data) > 15:
     c3.link_button(f"🧠 Seeking Alpha", f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
 
     # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
+ # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
     st.markdown("---")
     with st.container():
         st.subheader("🤖 Pregúntame tus dudas")
@@ -190,17 +191,18 @@ if not data.empty and len(data) > 15:
         except:
             resumen_noticias = "No se pudieron cargar noticias."
 
-      # --- BLOQUE DE CHAT CORREGIDO ---
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
-      if duda:
+        if duda:
+            # El prompt ahora le ordena a Gemini buscar en internet y dar conclusión simple
             contexto = f"""
-            INVESTIGACIÓN: Usa Google Search para noticias de las últimas 24h sobre {ticker_ind}.
+            INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
             
-            DATOS TÉCNICOS:
+            DATOS TÉCNICOS ACTUALES:
             - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
-            - Vencimiento: {dias_vencimiento} | Riesgo 2% | Meta 4%
+            - Soporte: ${prox_nivel:.2f}
+            - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
             
             TAREA: Analiza los datos y responde a: {duda}
             
@@ -217,5 +219,13 @@ if not data.empty and len(data) > 15:
                         response = model.generate_content(contexto)
                         st.write(response.text)
                     except Exception as e:
-                        # (Mantenemos tu lógica de reintento por si falla la cuota)
-                        st.error(f"Error: {e}")
+                        if "429" in str(e) or "quota" in str(e).lower():
+                            st.warning("⚠️ Cuota de búsqueda excedida. Te respondo con datos técnicos:")
+                            res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
+                            st.write(res_simple.text)
+                        else:
+                            st.error(f"Error: {e}")
+                else:
+                    st.error("IA no configurada.")
+else:
+    st.error("Esperando datos...")

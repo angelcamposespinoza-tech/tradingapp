@@ -19,7 +19,7 @@ def configurar_ia():
         try:
             return genai.GenerativeModel(
                 model_name=seleccionado,
-                tools=[{"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "unspecified", "dynamic_threshold": 0.06}}}]
+                tools=[{"google_search": {}}] 
             )
         except:
             return genai.GenerativeModel(seleccionado)

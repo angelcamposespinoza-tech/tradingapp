@@ -244,6 +244,10 @@ if not data.empty and len(data) > 15:
                             st.warning("⚠️ Cuota de búsqueda excedida. Te respondo con datos técnicos:")
                             res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
                             st.write(res_simple.text)
+                            # Guardar log de operación para mejora continua
+                        log_data = pd.DataFrame([[pd.Timestamp.now(), ticker_ind, precio_actual, duda]], 
+                                              columns=['Fecha', 'Ticker', 'Precio', 'Consulta'])
+                        log_data.to_csv('historial_trading.csv', mode='a', header=False, index=False)
                         else:
                             st.error(f"Error: {e}")
                 else:

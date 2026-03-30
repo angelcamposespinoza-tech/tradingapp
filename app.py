@@ -66,6 +66,22 @@ def detectar_niveles(df, window=10):
             niveles.append(df['Low'].iloc[i])
     return sorted(list(set(niveles)))
 
+def calcular_atr(df, period=14):
+    high_low = df['High'] - df['Low']
+    high_close = (df['High'] - df['Close'].shift()).abs()
+    low_close = (df['Low'] - df['Close'].shift()).abs()
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    return true_range.rolling(window=period).mean()
+
+def evaluar_volatilidad(df):
+    atr = calcular_atr(df).iloc[-1]
+    precio = df['Close'].iloc[-1]
+    # Si el movimiento es mayor al 1% del precio, es volatilidad alta
+    if atr > (precio * 0.01):
+        return "⚠️ Volatilidad ALTA", "error"
+    return "✅ Volatilidad Normal", "success"
+
 def obtener_etiqueta_pro(rsi, precio, ema200):
     if rsi < 35 and precio > ema200: return "🔥 CALL (Fuerte)"
     elif rsi < 35: return "🌱 CALL (Rebote)"
@@ -162,6 +178,11 @@ if not data.empty and len(data) > 15:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
+        texto_vol, color_vol = evaluar_volatilidad(data)
+        if color_vol == "error":
+            st.error(texto_vol)
+        else:
+            st.success(texto_vol)
         if precio_actual > ema200_actual:
             st.success("📈 ALCISTA")
         else:

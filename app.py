@@ -217,50 +217,53 @@ if not data.empty and len(data) > 15:
 
     # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
  # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
-    st.markdown("---")
-    with st.container():
-        st.subheader("🤖 Pregúntame tus dudas")
-        
-        # Obtenemos noticias para la IA
-        try:
-            raw_news = yf.Ticker(ticker_ind).news
-            resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
-        except:
-            resumen_noticias = "No se pudieron cargar noticias."
+    # --- FILA 3: COPILOTO IA ---
+        st.markdown("---")
+        with st.container():
+            st.subheader("🤖 Pregúntame tus dudas")
+            
+            try:
+                raw_news = yf.Ticker(ticker_ind).news
+                resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
+            except:
+                resumen_noticias = "No se pudieron cargar noticias."
 
-        duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
-        
-       if duda:
-            contexto = f"""
-            INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
-            DATOS TÉCNICOS ACTUALES:
-            - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
-            - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
-            - Soporte: ${prox_nivel:.2f}
-            - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
+            duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
             
-            TAREA: Analiza los datos y responde a: {duda}
-            
-            REGLA DE FORMATO: Al final de tu respuesta, DEBES incluir una sección llamada 
-            '📢 CONCLUSIÓN SIMPLE Y PLAN DE ACCIÓN' con este formato:
-            1. ¿Qué significa esto?
-            2. ¿Qué hacer HOY con la bolsa cerrada?
-            3. ¿Qué hacer MAÑANA a las 8:00 AM?
-            """
-            
-            with st.chat_message("assistant"):
-                if model:
-                    try:
-                        response = model.generate_content(contexto)
-                        st.write(response.text)
-                        # LLAMADA A GOOGLE SHEETS (Se guarda si la IA responde bien)
-                        guardar_en_sheets(ticker_ind, precio_actual, duda)
-                    except Exception as e:
-                        if "429" in str(e) or "quota" in str(e).lower():
-                            st.warning("⚠️ Cuota de búsqueda excedida. Respondiendo solo con datos técnicos.")
-                            res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
-                            st.write(res_simple.text)
-                            # TAMBIÉN GUARDAMOS AQUÍ
+            if duda:
+                contexto = f"""
+                INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
+                DATOS TÉCNICOS ACTUALES:
+                - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
+                - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
+                - Soporte: ${prox_nivel:.2f}
+                - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
+                
+                TAREA: Analiza los datos y responde a: {duda}
+                
+                REGLA DE FORMATO: Al final de tu respuesta, DEBES incluir una sección llamada 
+                '📢 CONCLUSIÓN SIMPLE Y PLAN DE ACCIÓN' con este formato:
+                1. ¿Qué significa esto?
+                2. ¿Qué hacer HOY con la bolsa cerrada?
+                3. ¿Qué hacer MAÑANA a las 8:00 AM?
+                """
+                
+                with st.chat_message("assistant"):
+                    if model:
+                        try:
+                            response = model.generate_content(contexto)
+                            st.write(response.text)
+                            # GUARDADO EN GOOGLE SHEETS
                             guardar_en_sheets(ticker_ind, precio_actual, duda)
-                        else:
-                            st.error(f"Error: {e}")
+                        except Exception as e:
+                            if "429" in str(e) or "quota" in str(e).lower():
+                                st.warning("⚠️ Cuota de búsqueda excedida. Respondiendo solo con datos técnicos.")
+                                res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
+                                st.write(res_simple.text)
+                                guardar_en_sheets(ticker_ind, precio_actual, duda)
+                            else:
+                                st.error(f"Error: {e}")
+                    else:
+                        st.error("IA no configurada.")
+else:
+    st.error("Esperando datos...")

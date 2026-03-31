@@ -4,7 +4,23 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import google.generativeai as genai
+import gspread
+from google.oauth2.service_account import Credentials
 
+def guardar_en_sheets(ticker, precio, duda):
+    try:
+        # Esto lee la "caja fuerte" que configuramos en el paso anterior
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        
+        # BUSCA TU EXCEL: Debe llamarse exactamente así
+        sheet = client.open("Historial_Trading_Angel").sheet1
+        sheet.append_row([str(pd.Timestamp.now()), ticker, precio, duda])
+    except Exception as e:
+        st.error(f"Error al guardar en Sheets: {e}")
+        
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 

@@ -248,7 +248,7 @@ if not data.empty and len(data) > 15:
                 3. ¿Qué hacer MAÑANA a las 8:00 AM?
                 """
                 
-                with st.chat_message("assistant"):
+        with st.chat_message("assistant"):
                     if model:
                         try:
                             response = model.generate_content(contexto)

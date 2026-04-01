@@ -7,19 +7,48 @@ import google.generativeai as genai
 import gspread
 from google.oauth2.service_account import Credentials
 
-def guardar_en_sheets(ticker, precio, duda):
+def guardar_en_sheets(ticker, precio, duda, direccion):
     try:
-        # Esto lee la "caja fuerte" que configuramos en el paso anterior
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds_dict = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
         
-        # BUSCA TU EXCEL: Debe llamarse exactamente así
         sheet = client.open("Historial_Trading_Angel").sheet1
-        sheet.append_row([str(pd.Timestamp.now()), ticker, precio, duda])
+        # Añadimos Dirección y un espacio para el Resultado futuro
+        sheet.append_row([str(pd.Timestamp.now()), ticker, precio, direccion, duda, "Pendiente"])
     except Exception as e:
         st.error(f"Error al guardar en Sheets: {e}")
+def verificar_aciertos():
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Historial_Trading_Angel").sheet1
+        
+        datos = sheet.get_all_records()
+        aciertos = 0
+        total = 0
+        
+        for i, fila in enumerate(datos, start=2): # Empezamos en la fila 2 por el encabezado
+            if fila['Resultado'] == "Pendiente":
+                precio_hoy = yf.download(fila['Ticker'], period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+                
+                ganó = False
+                if fila['Direccion'] == "CALL" and precio_hoy > fila['Precio']: ganó = True
+                elif fila['Direccion'] == "PUT" and precio_hoy < fila['Precio']: ganó = True
+                
+                resultado = "✅ Ganada" if ganó else "❌ Perdida"
+                sheet.update_cell(i, 6, resultado) # Actualiza la columna F (Resultado)
+            
+            if fila['Resultado'] != "Pendiente":
+                total += 1
+                if "Ganada" in fila['Resultado']: aciertos += 1
+        
+        return aciertos, total
+    except:
+        return 0, 0
         
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
@@ -119,7 +148,18 @@ v_intervalo, v_periodo = tiempos[dias_vencimiento]
 nuevos_tickers = st.sidebar.text_input("Agregar Tickers", value="").upper()
 EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "SPY"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
-
+# --- COPIAR DESDE AQUÍ ---
+st.sidebar.markdown("---")
+st.sidebar.header("📊 Auditoría de Estrategia")
+if st.sidebar.button("Actualizar Historial y Aciertos"):
+    with st.spinner("Calculando efectividad..."):
+        aciertos, total = verificar_aciertos()
+        if total > 0:
+            porcentaje = (aciertos / total) * 100
+            st.sidebar.metric("Efectividad IA", f"{porcentaje:.1f}%", f"{aciertos}/{total} Aciertos")
+        else:
+            st.sidebar.info("Aún no hay datos para auditar.")
+# --- HASTA AQUÍ ---
 st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES (ARRIBA)

@@ -15,7 +15,7 @@ def guardar_en_sheets(ticker, precio, duda, direccion):
         client = gspread.authorize(creds)
         
         sheet = client.open("Historial_Trading_Angel").sheet1
-        # Añadimos Dirección y un espacio para el Resultado futuro
+        # Registramos: Fecha, Ticker, Precio entrada, Dirección (CALL/PUT), Duda, Resultado inicial
         sheet.append_row([str(pd.Timestamp.now()), ticker, precio, direccion, duda, "Pendiente"])
     except Exception as e:
         st.error(f"Error al guardar en Sheets: {e}")
@@ -288,19 +288,20 @@ if not data.empty and len(data) > 15:
             3. ¿Qué hacer MAÑANA a las 8:00 AM?
             """
             
-            with st.chat_message("assistant"):
+    with st.chat_message("assistant"):
                 if model:
                     try:
                         response = model.generate_content(contexto)
                         st.write(response.text)
-                        # LLAMADA A GOOGLE SHEETS
-                        guardar_en_sheets(ticker_ind, precio_actual, duda)
+                        # --- AQUÍ PASAMOS LOS 4 DATOS CORRECTOS ---
+                        guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                     except Exception as e:
                         if "429" in str(e) or "quota" in str(e).lower():
                             st.warning("⚠️ Cuota excedida. Respondiendo solo con datos técnicos.")
                             res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
                             st.write(res_simple.text)
-                            guardar_en_sheets(ticker_ind, precio_actual, duda)
+                            # --- TAMBIÉN EN CASO DE ERROR DE CUOTA ---
+                            guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                         else:
                             st.error(f"Error: {e}")
                 else:

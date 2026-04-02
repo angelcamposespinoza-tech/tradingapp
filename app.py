@@ -276,6 +276,7 @@ if not data.empty and len(data) > 15:
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:
+            # 1. Definimos el contexto solo si el usuario escribió algo
             contexto = f"""
             INVESTIGACIÓN EN TIEMPO REAL: Usa Google Search para encontrar noticias de las últimas 24h sobre {ticker_ind}.
             DATOS TÉCNICOS ACTUALES:
@@ -293,23 +294,21 @@ if not data.empty and len(data) > 15:
             3. ¿Qué hacer MAÑANA a las 8:00 AM?
             """
             
-    with st.chat_message("assistant"):
+            # 2. El mensaje del asistente ahora vive dentro del 'if duda'
+            with st.chat_message("assistant"):
                 if model:
                     try:
                         response = model.generate_content(contexto)
                         st.write(response.text)
-                        # --- AQUÍ PASAMOS LOS 4 DATOS CORRECTOS ---
+                        # Guardamos en la nube
                         guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                     except Exception as e:
                         if "429" in str(e) or "quota" in str(e).lower():
-                            st.warning("⚠️ Cuota excedida. Respondiendo solo con datos técnicos.")
+                            st.warning("⚠️ Cuota excedida. Respondiendo con datos técnicos.")
                             res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
                             st.write(res_simple.text)
-                            # --- TAMBIÉN EN CASO DE ERROR DE CUOTA ---
                             guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                         else:
                             st.error(f"Error: {e}")
                 else:
                     st.error("IA no configurada.")
-else:
-    st.error("Esperando datos...")

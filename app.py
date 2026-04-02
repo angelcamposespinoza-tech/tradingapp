@@ -31,7 +31,11 @@ def verificar_aciertos():
         aciertos = 0
         total = 0
         
-        for i, fila in enumerate(datos, start=2): # Empezamos en la fila 2 por el encabezado
+        for i, fila in enumerate(datos, start=2): # Línea 36 original
+            # NUEVO FILTRO: Si es Neutral, lo saltamos y no cuenta para el %
+            if "Neutral" in str(fila.get('Direccion', '')):
+                continue
+                
             if fila['Resultado'] == "Pendiente":
                 precio_hoy = yf.download(fila['Ticker'], period="1d", interval="1m", progress=False)['Close'].iloc[-1]
                 
@@ -40,8 +44,9 @@ def verificar_aciertos():
                 elif fila['Direccion'] == "PUT" and precio_hoy < fila['Precio']: ganó = True
                 
                 resultado = "✅ Ganada" if ganó else "❌ Perdida"
-                sheet.update_cell(i, 6, resultado) # Actualiza la columna F (Resultado)
+                sheet.update_cell(i, 6, resultado)
             
+            # Solo sumamos al total si ya tiene un resultado y no es Neutral
             if fila['Resultado'] != "Pendiente":
                 total += 1
                 if "Ganada" in fila['Resultado']: aciertos += 1

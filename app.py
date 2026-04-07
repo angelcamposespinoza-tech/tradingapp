@@ -284,6 +284,7 @@ if not data.empty and len(data) > 15:
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
             - Soporte: ${prox_nivel:.2f}
             - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
+            - Quiero que siempre hables con lenguaje muy sencillo y fácil de entender para cualquier persona aún sin tener conocimientos de trading
             
             TAREA: Analiza los datos y responde a: {duda}
             

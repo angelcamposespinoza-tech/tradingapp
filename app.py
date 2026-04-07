@@ -167,7 +167,7 @@ if st.sidebar.button("Actualizar Historial y Aciertos"):
 # --- HASTA AQUÍ ---
 st.title("🚀 SUPERIOR SCANNER")
 
-# 2. MONITOR DE SEÑALES (ARRIBA)
+# 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 @st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
@@ -184,14 +184,29 @@ def escanear_mercado(lista, inter, peri):
         except: continue
     return resultados
 
-datos_resumen = escanear_mercado(EMPRESAS_TOP, v_intervalo, v_periodo)
-cols = st.columns(5)
-for i, res in enumerate(datos_resumen):
-    with cols[i % 5]:
-        st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
-        if "CALL" in res['S']: st.success(res['S'])
-        elif "PUT" in res['S']: st.error(res['S'])
-        else: st.info(res['S'])
+st.subheader("📊 Monitor de Sectores")
+
+# Definimos los grupos de empresas por sector
+sectores = {
+    "💻 Tecnología": ["AAPL", "NVDA", "MSFT", "GOOGL", "AMD"],
+    "🏦 Financiero": ["JPM", "GS", "BAC", "V", "MA"],
+    "📦 Consumo": ["WMT", "COST", "AMZN", "PG", "KO"],
+    "⚡ Energía/Otros": ["XOM", "TSLA", "META", "NFLX", "SPY"]
+}
+
+# Creamos las pestañas (las "barritas")
+tabs = st.tabs(list(sectores.keys()))
+
+for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
+    with tabs[i]:
+        datos_sector = escanear_mercado(lista_tickers, v_intervalo, v_periodo)
+        cols = st.columns(5)
+        for j, res in enumerate(datos_sector):
+            with cols[j % 5]:
+                st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
+                if "CALL" in res['S']: st.success(res['S'])
+                elif "PUT" in res['S']: st.error(res['S'])
+                else: st.info(res['S'])
 
 st.markdown("---")
 

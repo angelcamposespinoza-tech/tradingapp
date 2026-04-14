@@ -142,24 +142,24 @@ def obtener_etiqueta_pro(rsi, precio, ema200):
         
 def analizar_volumen(df):
     """
-    Aplica la regla del profesor:
-    - Alto volumen + Alza = Métete (CALL)
-    - Alto volumen + Baja = Venta (PUT)
-    - Bajo volumen = Espérate
+    Aplica la regla del profesor ajustada a opciones:
+    - Alto volumen + Alza = Confirmación CALL
+    - Alto volumen + Baja = Confirmación PUT
+    - Bajo volumen = Paciencia (Theta te puede comer)
     """
     vol_actual = df['Volume'].iloc[-1]
     vol_media = df['Volume'].rolling(window=20).mean().iloc[-1]
     precio_actual = df['Close'].iloc[-1]
     precio_anterior = df['Close'].iloc[-2]
     
-    # Definimos si el volumen es "Alto" (20% por encima de su media)
+    # El volumen es 'alto' si supera en 20% su media de las últimas 20 velas
     es_volumen_alto = vol_actual > (vol_media * 1.2)
     es_alza = precio_actual > precio_anterior
     
     if es_volumen_alto and es_alza:
-        return "🚀 VOLUMEN FUERTE (Compra)", "success"
+        return "🚀 VOLUMEN FUERTE (CALL)", "success"
     elif es_volumen_alto and not es_alza:
-        return "📉 VOLUMEN FUERTE (Venta)", "error"
+        return "📉 VOLUMEN FUERTE (PUT)", "error"
     else:
         return "😴 Bajo Volumen (Espera)", "warning"
 # --- BARRA LATERAL ---

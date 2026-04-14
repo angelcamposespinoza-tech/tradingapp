@@ -344,7 +344,8 @@ if not data.empty and len(data) > 15:
             resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
         except:
             resumen_noticias = "No se pudieron cargar noticias."
-
+        texto_vol, color_vol = evaluar_volatilidad(data)
+        vol_info = "ALTA (Cuidado con el riesgo)" if color_vol == "error" else "Normal/Baja"
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:

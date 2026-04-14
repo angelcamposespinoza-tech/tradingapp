@@ -295,16 +295,32 @@ if not data.empty and len(data) > 15:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
+        
+        # --- 1. NUEVO: Lógica de Volumen del Profesor ---
+        vol_txt_ind, vol_tipo_ind = analizar_volumen(data)
+        if vol_tipo_ind == "success":
+            st.success(vol_txt_ind)
+        elif vol_tipo_ind == "error":
+            st.error(vol_txt_ind)
+        else:
+            st.warning(vol_txt_ind)
+            
+        # --- 2. LO QUE YA TENÍAS: Volatilidad ---
         texto_vol, color_vol = evaluar_volatilidad(data)
         if color_vol == "error":
             st.error(texto_vol)
         else:
             st.success(texto_vol)
+            
+        # --- 3. LO QUE YA TENÍAS: Tendencia EMA ---
         if precio_actual > ema200_actual:
             st.success("📈 ALCISTA")
         else:
             st.error("📉 BAJISTA")
+            
         st.write("---")
+        
+        # --- 4. LO QUE YA TENÍAS: Gestión de Riesgo ---
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
 

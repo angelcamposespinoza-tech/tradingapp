@@ -229,12 +229,14 @@ def escanear_mercado(lista, inter, peri):
                 ema200 = calcular_ema(df['Close'], 200).iloc[-1]
                 señal = obtener_etiqueta_pro(rsi, precio, ema200)
                 
-                # --- AGREGADO: Análisis de Volumen ---
+                # --- NUEVO: Análisis de Volumen y Patrones ---
                 vol_txt, vol_tipo = analizar_volumen(df)
+                patron_txt, _ = detectar_patrones_velas(df) # <-- Calculamos el martillo aquí
                 
                 resultados.append({
                     "T": t, "P": float(precio), "R": float(rsi), 
-                    "S": señal, "V": vol_txt, "VT": vol_tipo
+                    "S": señal, "V": vol_txt, "VT": vol_tipo,
+                    "PATRON": patron_txt # <-- Lo guardamos en el diccionario
                 })
         except: continue
     return resultados
@@ -252,20 +254,25 @@ sectores = {
 # --- REEMPLAZA TU BLOQUE POR ESTE ---
 tabs = st.tabs(list(sectores.keys()))
 
+# --- BLOQUE DE SECTORES ACTUALIZADO ---
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
     with tabs[i]:
         datos_sector = escanear_mercado(lista_tickers, v_intervalo, v_periodo)
         cols = st.columns(5)
         for j, res in enumerate(datos_sector):
             with cols[j % 5]:
+                # 1. Métrica principal: Ticker, Precio y RSI
                 st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
                 
-                # Esto ya lo tenías (Señal de precio)
-                if "CALL" in res['S']: st.success(res['S'])
-                elif "PUT" in res['S']: st.error(res['S'])
-                else: st.info(res['S'])
+                # 2. Señal de Estrategia (CALL/PUT/Neutral)
+                if "CALL" in res['S']: 
+                    st.success(res['S'])
+                elif "PUT" in res['S']: 
+                    st.error(res['S'])
+                else: 
+                    st.info(res['S'])
                 
-                # --- ESTO ES LO NUEVO QUE REEMPLAZA/SE AGREGA AL FINAL DEL BLOQUE ---
+                # 3. Señal de Volumen (Regla del Profesor)
                 if res['VT'] == "success": 
                     st.caption(f"🔥 {res['V']}")
                 elif res['VT'] == "error": 
@@ -273,8 +280,12 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
                 else: 
                     st.caption(f"💤 {res['V']}")
 
-st.markdown("---")
+                # 4. NUEVO: Alerta de Patrón de Velas (Martillos)
+                # Solo se muestra si la función detectó algo (no es None)
+                if res.get('PATRON'):
+                    st.warning(f"🎯 {res['PATRON']}")
 
+st.markdown("---")
 # 3. ANÁLISIS DETALLADO
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
@@ -328,6 +339,10 @@ if not data.empty and len(data) > 15:
             st.error(vol_txt_ind)
         else:
             st.warning(vol_txt_ind)
+        # --- NUEVO: Patrón de Velas en Detalle ---
+        patron_ind, _ = detectar_patrones_velas(data)
+        if patron_ind:
+            st.warning(f"🎯 {patron_ind}")
             
         # --- 2. LO QUE YA TENÍAS: Volatilidad ---
         texto_vol, color_vol = evaluar_volatilidad(data)

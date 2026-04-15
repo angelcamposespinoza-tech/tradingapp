@@ -192,7 +192,6 @@ st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 @st.cache_data(ttl=60)
-@st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:

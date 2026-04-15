@@ -196,15 +196,14 @@ def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:
         try:
-            # Añadimos 'threads=False' para evitar conflictos de memoria
-            # Y un timeout de 5 segundos para que no se quede trabado
-            df = yf.download(t, period=peri, interval=inter, progress=False, threads=False, timeout=5)
+            # timeout=2: Si no responde en 2 segundos, lo salta.
+            # threads=False: Evita que Streamlit se confunda con múltiples procesos.
+            df = yf.download(t, period=peri, interval=inter, progress=False, timeout=2, threads=False)
             
             if df is not None and not df.empty:
                 if df.columns.nlevels > 1: 
                     df.columns = df.columns.get_level_values(0)
                 
-                # Solo procesamos si hay datos suficientes
                 if len(df) > 10:
                     rsi = calcular_rsi(df['Close']).iloc[-1]
                     precio = df['Close'].iloc[-1]
@@ -216,8 +215,7 @@ def escanear_mercado(lista, inter, peri):
                         "T": t, "P": float(precio), "R": float(rsi), 
                         "S": señal, "V": vol_txt, "VT": vol_tipo
                     })
-        except Exception as e:
-            st.warning(f"No se pudo cargar {t}: {e}") # Para saber cuál falla
+        except:
             continue
     return resultados
 

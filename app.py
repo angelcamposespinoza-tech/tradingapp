@@ -55,7 +55,7 @@ def verificar_aciertos():
     except:
         return 0, 0
 
-        
+     
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 
@@ -162,6 +162,30 @@ def analizar_volumen(df):
         return "📉 VOLUMEN FUERTE (PUT)", "error"
     else:
         return "😴 Bajo Volumen (Espera)", "warning"
+
+def detectar_patrones_velas(df):
+    if len(df) < 2: return None, None
+    
+    # Datos de la última vela (la actual o la más reciente cerrada)
+    ultima = df.iloc[-1]
+    cuerpo = abs(ultima['Close'] - ultima['Open'])
+    rango_total = ultima['High'] - ultima['Low']
+    sombra_inferior = min(ultima['Open'], ultima['Close']) - ultima['Low']
+    sombra_superior = ultima['High'] - max(ultima['Open'], ultima['Close'])
+    
+    # Lógica de Martillo (Hammer) - Cuerpo pequeño, sombra inferior larga
+    # La sombra inferior debe ser al menos 2 veces el cuerpo
+    es_martillo = sombra_inferior > (cuerpo * 2) and sombra_superior < (cuerpo * 0.5)
+    
+    # Lógica de Martillo Inverso (Shooting Star) - Sombra superior larga
+    es_martillo_inv = sombra_superior > (cuerpo * 2) and sombra_inferior < (cuerpo * 0.5)
+    
+    if es_martillo:
+        return "🔨 MARTILLO (Rebote Alcista)", "success"
+    if es_martillo_inv:
+        return "☄️ MARTILLO INV (Caída Inminente)", "error"
+        
+    return None, None
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)

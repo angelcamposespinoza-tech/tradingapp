@@ -192,27 +192,33 @@ st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 @st.cache_data(ttl=60)
-@st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:
         try:
-            df = yf.download(t, period=peri, interval=inter, progress=False)
-            if not df.empty:
-                if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
-                rsi = calcular_rsi(df['Close']).iloc[-1]
-                precio = df['Close'].iloc[-1]
-                ema200 = calcular_ema(df['Close'], 200).iloc[-1]
-                señal = obtener_etiqueta_pro(rsi, precio, ema200)
+            # Añadimos 'threads=False' para evitar conflictos de memoria
+            # Y un timeout de 5 segundos para que no se quede trabado
+            df = yf.download(t, period=peri, interval=inter, progress=False, threads=False, timeout=5)
+            
+            if df is not None and not df.empty:
+                if df.columns.nlevels > 1: 
+                    df.columns = df.columns.get_level_values(0)
                 
-                # --- AGREGADO: Análisis de Volumen ---
-                vol_txt, vol_tipo = analizar_volumen(df)
-                
-                resultados.append({
-                    "T": t, "P": float(precio), "R": float(rsi), 
-                    "S": señal, "V": vol_txt, "VT": vol_tipo
-                })
-        except: continue
+                # Solo procesamos si hay datos suficientes
+                if len(df) > 10:
+                    rsi = calcular_rsi(df['Close']).iloc[-1]
+                    precio = df['Close'].iloc[-1]
+                    ema200 = calcular_ema(df['Close'], 200).iloc[-1]
+                    señal = obtener_etiqueta_pro(rsi, precio, ema200)
+                    vol_txt, vol_tipo = analizar_volumen(df)
+                    
+                    resultados.append({
+                        "T": t, "P": float(precio), "R": float(rsi), 
+                        "S": señal, "V": vol_txt, "VT": vol_tipo
+                    })
+        except Exception as e:
+            st.warning(f"No se pudo cargar {t}: {e}") # Para saber cuál falla
+            continue
     return resultados
 
 st.subheader("📊 Monitor de Sectores")

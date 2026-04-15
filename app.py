@@ -54,6 +54,7 @@ def verificar_aciertos():
         return aciertos, total
     except:
         return 0, 0
+
         
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
@@ -138,7 +139,29 @@ def obtener_etiqueta_pro(rsi, precio, ema200):
     elif rsi > 65 and precio < ema200: return "⚠️ PUT (Fuerte)"
     elif rsi > 65: return "☁️ PUT (Técnico)"
     else: return "⚖️ Neutral"
-
+        
+def analizar_volumen(df):
+    """
+    Aplica la regla del profesor ajustada a opciones:
+    - Alto volumen + Alza = Confirmación CALL
+    - Alto volumen + Baja = Confirmación PUT
+    - Bajo volumen = Paciencia (Theta te puede comer)
+    """
+    vol_actual = df['Volume'].iloc[-1]
+    vol_media = df['Volume'].rolling(window=20).mean().iloc[-1]
+    precio_actual = df['Close'].iloc[-1]
+    precio_anterior = df['Close'].iloc[-2]
+    
+    # El volumen es 'alto' si supera en 20% su media de las últimas 20 velas
+    es_volumen_alto = vol_actual > (vol_media * 1.2)
+    es_alza = precio_actual > precio_anterior
+    
+    if es_volumen_alto and es_alza:
+        return "🚀 VOLUMEN FUERTE (CALL)", "success"
+    elif es_volumen_alto and not es_alza:
+        return "📉 VOLUMEN FUERTE (PUT)", "error"
+    else:
+        return "😴 Bajo Volumen (Espera)", "warning"
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
@@ -169,6 +192,7 @@ st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 @st.cache_data(ttl=60)
+@st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:
@@ -180,7 +204,14 @@ def escanear_mercado(lista, inter, peri):
                 precio = df['Close'].iloc[-1]
                 ema200 = calcular_ema(df['Close'], 200).iloc[-1]
                 señal = obtener_etiqueta_pro(rsi, precio, ema200)
-                resultados.append({"T": t, "P": float(precio), "R": float(rsi), "S": señal})
+                
+                # --- AGREGADO: Análisis de Volumen ---
+                vol_txt, vol_tipo = analizar_volumen(df)
+                
+                resultados.append({
+                    "T": t, "P": float(precio), "R": float(rsi), 
+                    "S": señal, "V": vol_txt, "VT": vol_tipo
+                })
         except: continue
     return resultados
 
@@ -194,7 +225,7 @@ sectores = {
     "⚡ Energía/Otros": ["XOM", "TSLA", "META", "NFLX", "SPY"]
 }
 
-# Creamos las pestañas (las "barritas")
+# --- REEMPLAZA TU BLOQUE POR ESTE ---
 tabs = st.tabs(list(sectores.keys()))
 
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
@@ -204,9 +235,19 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
         for j, res in enumerate(datos_sector):
             with cols[j % 5]:
                 st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
+                
+                # Esto ya lo tenías (Señal de precio)
                 if "CALL" in res['S']: st.success(res['S'])
                 elif "PUT" in res['S']: st.error(res['S'])
                 else: st.info(res['S'])
+                
+                # --- ESTO ES LO NUEVO QUE REEMPLAZA/SE AGREGA AL FINAL DEL BLOQUE ---
+                if res['VT'] == "success": 
+                    st.caption(f"🔥 {res['V']}")
+                elif res['VT'] == "error": 
+                    st.caption(f"⚠️ {res['V']}")
+                else: 
+                    st.caption(f"💤 {res['V']}")
 
 st.markdown("---")
 
@@ -254,16 +295,32 @@ if not data.empty and len(data) > 15:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
+        
+        # --- 1. NUEVO: Lógica de Volumen del Profesor ---
+        vol_txt_ind, vol_tipo_ind = analizar_volumen(data)
+        if vol_tipo_ind == "success":
+            st.success(vol_txt_ind)
+        elif vol_tipo_ind == "error":
+            st.error(vol_txt_ind)
+        else:
+            st.warning(vol_txt_ind)
+            
+        # --- 2. LO QUE YA TENÍAS: Volatilidad ---
         texto_vol, color_vol = evaluar_volatilidad(data)
         if color_vol == "error":
             st.error(texto_vol)
         else:
             st.success(texto_vol)
+            
+        # --- 3. LO QUE YA TENÍAS: Tendencia EMA ---
         if precio_actual > ema200_actual:
             st.success("📈 ALCISTA")
         else:
             st.error("📉 BAJISTA")
+            
         st.write("---")
+        
+        # --- 4. LO QUE YA TENÍAS: Gestión de Riesgo ---
         st.error(f"SL: ${sl:.2f}")
         st.success(f"TP: ${tp:.2f}")
 
@@ -287,7 +344,8 @@ if not data.empty and len(data) > 15:
             resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
         except:
             resumen_noticias = "No se pudieron cargar noticias."
-
+        texto_vol, color_vol = evaluar_volatilidad(data)
+        vol_info = "ALTA (Cuidado con el riesgo)" if color_vol == "error" else "Normal/Baja"
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:
@@ -297,6 +355,7 @@ if not data.empty and len(data) > 15:
             DATOS TÉCNICOS ACTUALES:
             - Precio: ${precio_actual:.2f} | RSI: {rsi_val:.1f}
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
+            - VOLUMEN: {vol_info}  <-- NUEVO DATO
             - Soporte: ${prox_nivel:.2f}
             - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
             - Quiero que siempre hables con lenguaje muy sencillo y fácil de entender para cualquier persona aún sin tener conocimientos de trading

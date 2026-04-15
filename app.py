@@ -55,7 +55,7 @@ def verificar_aciertos():
     except:
         return 0, 0
 
-     
+        
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key="AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g")
 
@@ -162,30 +162,6 @@ def analizar_volumen(df):
         return "📉 VOLUMEN FUERTE (PUT)", "error"
     else:
         return "😴 Bajo Volumen (Espera)", "warning"
-
-def detectar_patrones_velas(df):
-    if len(df) < 2: return None, None
-    
-    # Datos de la última vela (la actual o la más reciente cerrada)
-    ultima = df.iloc[-1]
-    cuerpo = abs(ultima['Close'] - ultima['Open'])
-    rango_total = ultima['High'] - ultima['Low']
-    sombra_inferior = min(ultima['Open'], ultima['Close']) - ultima['Low']
-    sombra_superior = ultima['High'] - max(ultima['Open'], ultima['Close'])
-    
-    # Lógica de Martillo (Hammer) - Cuerpo pequeño, sombra inferior larga
-    # La sombra inferior debe ser al menos 2 veces el cuerpo
-    es_martillo = sombra_inferior > (cuerpo * 2) and sombra_superior < (cuerpo * 0.5)
-    
-    # Lógica de Martillo Inverso (Shooting Star) - Sombra superior larga
-    es_martillo_inv = sombra_superior > (cuerpo * 2) and sombra_inferior < (cuerpo * 0.5)
-    
-    if es_martillo:
-        return "🔨 MARTILLO (Rebote Alcista)", "success"
-    if es_martillo_inv:
-        return "☄️ MARTILLO INV (Caída Inminente)", "error"
-        
-    return None, None
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
@@ -229,14 +205,12 @@ def escanear_mercado(lista, inter, peri):
                 ema200 = calcular_ema(df['Close'], 200).iloc[-1]
                 señal = obtener_etiqueta_pro(rsi, precio, ema200)
                 
-                # --- NUEVO: Análisis de Volumen y Patrones ---
+                # --- AGREGADO: Análisis de Volumen ---
                 vol_txt, vol_tipo = analizar_volumen(df)
-                patron_txt, _ = detectar_patrones_velas(df) # <-- Calculamos el martillo aquí
                 
                 resultados.append({
                     "T": t, "P": float(precio), "R": float(rsi), 
-                    "S": señal, "V": vol_txt, "VT": vol_tipo,
-                    "PATRON": patron_txt # <-- Lo guardamos en el diccionario
+                    "S": señal, "V": vol_txt, "VT": vol_tipo
                 })
         except: continue
     return resultados
@@ -254,25 +228,20 @@ sectores = {
 # --- REEMPLAZA TU BLOQUE POR ESTE ---
 tabs = st.tabs(list(sectores.keys()))
 
-# --- BLOQUE DE SECTORES ACTUALIZADO ---
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
     with tabs[i]:
         datos_sector = escanear_mercado(lista_tickers, v_intervalo, v_periodo)
         cols = st.columns(5)
         for j, res in enumerate(datos_sector):
             with cols[j % 5]:
-                # 1. Métrica principal: Ticker, Precio y RSI
                 st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
                 
-                # 2. Señal de Estrategia (CALL/PUT/Neutral)
-                if "CALL" in res['S']: 
-                    st.success(res['S'])
-                elif "PUT" in res['S']: 
-                    st.error(res['S'])
-                else: 
-                    st.info(res['S'])
+                # Esto ya lo tenías (Señal de precio)
+                if "CALL" in res['S']: st.success(res['S'])
+                elif "PUT" in res['S']: st.error(res['S'])
+                else: st.info(res['S'])
                 
-                # 3. Señal de Volumen (Regla del Profesor)
+                # --- ESTO ES LO NUEVO QUE REEMPLAZA/SE AGREGA AL FINAL DEL BLOQUE ---
                 if res['VT'] == "success": 
                     st.caption(f"🔥 {res['V']}")
                 elif res['VT'] == "error": 
@@ -280,12 +249,8 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
                 else: 
                     st.caption(f"💤 {res['V']}")
 
-                # 4. NUEVO: Alerta de Patrón de Velas (Martillos)
-                # Solo se muestra si la función detectó algo (no es None)
-                if res.get('PATRON'):
-                    st.warning(f"🎯 {res['PATRON']}")
-
 st.markdown("---")
+
 # 3. ANÁLISIS DETALLADO
 st.sidebar.header("🔍 Gráfico Detallado")
 ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
@@ -339,10 +304,6 @@ if not data.empty and len(data) > 15:
             st.error(vol_txt_ind)
         else:
             st.warning(vol_txt_ind)
-        # --- NUEVO: Patrón de Velas en Detalle ---
-        patron_ind, _ = detectar_patrones_velas(data)
-        if patron_ind:
-            st.warning(f"🎯 {patron_ind}")
             
         # --- 2. LO QUE YA TENÍAS: Volatilidad ---
         texto_vol, color_vol = evaluar_volatilidad(data)

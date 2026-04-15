@@ -191,31 +191,28 @@ if st.sidebar.button("Actualizar Historial y Aciertos"):
 st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
-@st.cache_data(ttl=60) # <--- SOLO UNA VEZ
+@st.cache_data(ttl=60)
+@st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
     for t in lista:
         try:
-            # Añadimos timeout para que no se congele la App
-            df = yf.download(t, period=peri, interval=inter, progress=False, timeout=5)
+            df = yf.download(t, period=peri, interval=inter, progress=False)
             if not df.empty:
-                if df.columns.nlevels > 1: 
-                    df.columns = df.columns.get_level_values(0)
+                if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
+                rsi = calcular_rsi(df['Close']).iloc[-1]
+                precio = df['Close'].iloc[-1]
+                ema200 = calcular_ema(df['Close'], 200).iloc[-1]
+                señal = obtener_etiqueta_pro(rsi, precio, ema200)
                 
-                # Verificamos que tengamos suficientes datos para los cálculos
-                if len(df) > 20:
-                    rsi = calcular_rsi(df['Close']).iloc[-1]
-                    precio = df['Close'].iloc[-1]
-                    ema200 = calcular_ema(df['Close'], 200).iloc[-1]
-                    señal = obtener_etiqueta_pro(rsi, precio, ema200)
-                    vol_txt, vol_tipo = analizar_volumen(df)
-                    
-                    resultados.append({
-                        "T": t, "P": float(precio), "R": float(rsi), 
-                        "S": señal, "V": vol_txt, "VT": vol_tipo
-                    })
-        except Exception:
-            continue # Si falla una, pasa a la siguiente rápidamente
+                # --- AGREGADO: Análisis de Volumen ---
+                vol_txt, vol_tipo = analizar_volumen(df)
+                
+                resultados.append({
+                    "T": t, "P": float(precio), "R": float(rsi), 
+                    "S": señal, "V": vol_txt, "VT": vol_tipo
+                })
+        except: continue
     return resultados
 
 st.subheader("📊 Monitor de Sectores")
@@ -347,8 +344,7 @@ if not data.empty and len(data) > 15:
             resumen_noticias = "\n".join([n['title'] for n in raw_news[:3]]) if raw_news else "Sin noticias."
         except:
             resumen_noticias = "No se pudieron cargar noticias."
-        texto_vol, color_vol = evaluar_volatilidad(data)
-        vol_info = "ALTA (Cuidado con el riesgo)" if color_vol == "error" else "Normal/Baja"
+
         duda = st.chat_input(f"Pregúntale a Gemini sobre {ticker_ind}...")
         
         if duda:

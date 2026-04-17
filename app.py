@@ -4,8 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import google.generativeai as genai
-import gspread
-from google.oauth2.service_account import Credentials
+
 
 def guardar_en_sheets(ticker, precio, duda, direccion):
     try:

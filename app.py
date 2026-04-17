@@ -262,13 +262,24 @@ if not data.empty and len(data) > 15:
     ema200_actual = calcular_ema(data['Close'], 200).iloc[-1]
     rsi_val = calcular_rsi(data['Close']).iloc[-1]
     etiqueta_ind = obtener_etiqueta_pro(rsi_val, precio_actual, ema200_actual)
+    
+    # 1. DEFINICIÓN DE TECHOS Y PISOS (Calculamos antes de graficar)
     mitad = len(data) // 2
     datos_pasados = data.iloc[:mitad]
-    
     techo_ref = datos_pasados['High'].max()
     piso_ref = datos_pasados['Low'].min()
-    
-    # Lógica de detección de ruptura
+    techo_periodo = data['High'].max() # Para el panel lateral
+    piso_periodo = data['Low'].min()   # Para el panel lateral
+
+    # 2. GESTIÓN DE RIESGO (Definimos SL y TP)
+    mov_sl = dinero_en_riesgo / 100
+    mov_tp = meta_ganancia / 100
+    if rsi_val < 50:
+        sl, tp = precio_actual - mov_sl, precio_actual + mov_tp
+    else:
+        sl, tp = precio_actual + mov_sl, precio_actual - mov_tp
+
+    # 3. LÓGICA DE RUPTURA
     ruptura_texto = ""
     if precio_actual > techo_ref:
         ruptura_texto = "🚀 ¡TECHO ROTO! (Posible Rally)"
@@ -283,6 +294,11 @@ if not data.empty and len(data) > 15:
         fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 200), name="EMA 200", line=dict(color='purple', width=3)), row=1, col=1)
         fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 20), name="EMA 20", line=dict(color='orange', width=1)), row=1, col=1)
         
+        # Dibujamos SL y TP ahora que ya están definidos
+        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
+        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
+        
+        # Niveles detectados
         niveles = detectar_niveles(data)
         prox_nivel = min(niveles, key=lambda x: abs(x - precio_actual))
         for n in niveles:
@@ -291,23 +307,23 @@ if not data.empty and len(data) > 15:
 
         v_colors = ['green' if r['Open'] < r['Close'] else 'red' for _, r in data.iterrows()]
         fig.add_trace(go.Bar(x=data.index, y=data['Volume'], name="Volumen", marker_color=v_colors, opacity=0.4), row=2, col=1)
-        fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
-        fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
         fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=600)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_info:
         st.subheader(f"🏷️ {ticker_ind}")
         st.metric("Precio Actual", f"${precio_actual:,.2f}")
+        if ruptura_texto: st.warning(ruptura_texto) # Mostramos el aviso si hay ruptura
+        
         st.write("---")
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
+        
         st.write("---")
-        st.markdown(f"**Límites del Periodo ({dias_vencimiento})**")
-        st.metric("🏔️ Techo (Máximo)", f"${techo_periodo:.2f}")
-        st.metric("📉 Piso (Mínimo)", f"${piso_periodo:.2f}")
-        st.write("---")
+        st.markdown(f"**Referencia ({dias_vencimiento})**")
+        st.metric("🏔️ Techo", f"${techo_ref:.2f}")
+        st.metric("📉 Piso", f"${piso_ref:.2f}")
         
         # --- 1. NUEVO: Lógica de Volumen del Profesor ---
         vol_txt_ind, vol_tipo_ind = analizar_volumen(data)

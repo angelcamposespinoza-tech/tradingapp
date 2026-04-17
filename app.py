@@ -57,7 +57,8 @@ def verificar_aciertos():
 
         
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
-genai.configure(api_key="AIzaSyCUeLpjViYxVu0KkVdq7f6JzHU7r03l23E")
+# Cambia la línea fija por esta que lee de tus Secrets
+genai.configure(api_key=st.secrets["AIzaSyBK1aeiT7nlyP6GW7gUX_GoZv45dzlhN7g"]) 
 
 @st.cache_resource
 @st.cache_resource

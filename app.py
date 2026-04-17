@@ -7,58 +7,17 @@ import google.generativeai as genai
 
 
 def guardar_en_sheets(ticker, precio, duda, direccion):
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        
-        sheet = client.open("Historial_Trading_Angel").sheet1
-        # Registramos: Fecha, Ticker, Precio entrada, Dirección (CALL/PUT), Duda, Resultado inicial
-        sheet.append_row([str(pd.Timestamp.now()), ticker, precio, direccion, duda, "Pendiente"])
-    except Exception as e:
-        st.error(f"Error al guardar en Sheets: {e}")
-def verificar_aciertos():
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        sheet = client.open("Historial_Trading_Angel").sheet1
-        
-        datos = sheet.get_all_records()
-        aciertos = 0
-        total = 0
-        
-        for i, fila in enumerate(datos, start=2): # Línea 36 original
-            # NUEVO FILTRO: Si es Neutral, lo saltamos y no cuenta para el %
-            if "Neutral" in str(fila.get('Direccion', '')):
-                continue
-                
-            if fila['Resultado'] == "Pendiente":
-                precio_hoy = yf.download(fila['Ticker'], period="1d", interval="1m", progress=False)['Close'].iloc[-1]
-                
-                ganó = False
-                if fila['Direccion'] == "CALL" and precio_hoy > fila['Precio']: ganó = True
-                elif fila['Direccion'] == "PUT" and precio_hoy < fila['Precio']: ganó = True
-                
-                resultado = "✅ Ganada" if ganó else "❌ Perdida"
-                sheet.update_cell(i, 6, resultado)
-            
-            # Solo sumamos al total si ya tiene un resultado y no es Neutral
-            if fila['Resultado'] != "Pendiente":
-                total += 1
-                if "Ganada" in fila['Resultado']: aciertos += 1
-        
-        return aciertos, total
-    except:
-        return 0, 0
+    # Ya no hace nada, así no pide secretos
+    pass
 
-        
+def verificar_aciertos():
+    # Retorna cero para no dar error en la barra lateral
+    return 0, 0
+      
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-@st.cache_resource
+
 @st.cache_resource
 def configurar_ia():
     try:
@@ -406,13 +365,11 @@ if not data.empty and len(data) > 15:
                         response = model.generate_content(contexto)
                         st.write(response.text)
                         # Guardamos en la nube
-                        guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                     except Exception as e:
                         if "429" in str(e) or "quota" in str(e).lower():
                             st.warning("⚠️ Cuota excedida. Respondiendo con datos técnicos.")
                             res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
                             st.write(res_simple.text)
-                            guardar_en_sheets(ticker_ind, precio_actual, duda, etiqueta_ind)
                         else:
                             st.error(f"Error: {e}")
                 else:

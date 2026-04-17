@@ -57,7 +57,7 @@ def verificar_aciertos():
 
         
 # --- CONFIGURACIÓN DE IA (CON BÚSQUEDA EN INTERNET) ---
-genai.configure(api_key="AQ.Ab8RN6Jk1A4YhlEFeX8eLr8znz_DnrfCVtsHjgeou98KPAxLWQ")
+genai.configure(api_key="AIzaSyD9o6X8qjRY-EmxBchdZRjHaWBM_tiDljs")
 
 @st.cache_resource
 @st.cache_resource

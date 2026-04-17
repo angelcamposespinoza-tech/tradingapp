@@ -386,6 +386,8 @@ if not data.empty and len(data) > 15:
             - Tendencia: {"ALCISTA" if precio_actual > ema200_actual else "BAJISTA"}
             - VOLUMEN: {vol_info}  <-- NUEVO DATO
             - Soporte: ${prox_nivel:.2f}
+            - REFERENCIA DEL PERIODO ({dias_vencimiento}): Techo ${techo_ref:.2f} | Piso ${piso_ref:.2f}
+            - ESTADO DE RUPTURA: {ruptura_texto if ruptura_texto else "Dentro de rangos normales"}
             - Estrategia: Vencimiento a {dias_vencimiento}, riesgo 2% (${dinero_en_riesgo:.2f}), meta 4%.
             - Quiero que siempre hables con lenguaje muy sencillo y fácil de entender para cualquier persona aún sin tener conocimientos de trading
             

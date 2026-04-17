@@ -262,6 +262,8 @@ if not data.empty and len(data) > 15:
     ema200_actual = calcular_ema(data['Close'], 200).iloc[-1]
     rsi_val = calcular_rsi(data['Close']).iloc[-1]
     etiqueta_ind = obtener_etiqueta_pro(rsi_val, precio_actual, ema200_actual)
+    techo_periodo = data['High'].max()
+    piso_periodo = data['Low'].min()
     
     mov_sl = dinero_en_riesgo / 100
     mov_tp = meta_ganancia / 100
@@ -295,6 +297,11 @@ if not data.empty and len(data) > 15:
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")
+        st.write("---")
+        st.markdown(f"**Límites del Periodo ({dias_vencimiento})**")
+        st.metric("🏔️ Techo (Máximo)", f"${techo_periodo:.2f}")
+        st.metric("📉 Piso (Mínimo)", f"${piso_periodo:.2f}")
+        st.write("---")
         
         # --- 1. NUEVO: Lógica de Volumen del Profesor ---
         vol_txt_ind, vol_tipo_ind = analizar_volumen(data)

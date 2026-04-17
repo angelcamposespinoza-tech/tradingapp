@@ -262,15 +262,18 @@ if not data.empty and len(data) > 15:
     ema200_actual = calcular_ema(data['Close'], 200).iloc[-1]
     rsi_val = calcular_rsi(data['Close']).iloc[-1]
     etiqueta_ind = obtener_etiqueta_pro(rsi_val, precio_actual, ema200_actual)
-    techo_periodo = data['High'].max()
-    piso_periodo = data['Low'].min()
+    mitad = len(data) // 2
+    datos_pasados = data.iloc[:mitad]
     
-    mov_sl = dinero_en_riesgo / 100
-    mov_tp = meta_ganancia / 100
-    if rsi_val < 50:
-        sl, tp = precio_actual - mov_sl, precio_actual + mov_tp
-    else:
-        sl, tp = precio_actual + mov_sl, precio_actual - mov_tp
+    techo_ref = datos_pasados['High'].max()
+    piso_ref = datos_pasados['Low'].min()
+    
+    # Lógica de detección de ruptura
+    ruptura_texto = ""
+    if precio_actual > techo_ref:
+        ruptura_texto = "🚀 ¡TECHO ROTO! (Posible Rally)"
+    elif precio_actual < piso_ref:
+        ruptura_texto = "📉 ¡PISO ROTO! (Caída Libre)"
 
     # --- FILA 1: GRÁFICO Y MINI PANEL ---
     col_graf, col_info = st.columns([4, 1])
@@ -294,6 +297,9 @@ if not data.empty and len(data) > 15:
         st.plotly_chart(fig, use_container_width=True)
 
     with col_info:
+        st.subheader(f"🏷️ {ticker_ind}")
+        st.metric("Precio Actual", f"${precio_actual:,.2f}")
+        st.write("---")
         st.subheader("🎯 Señal")
         st.write(f"Estado: **{etiqueta_ind}**")
         st.metric("RSI", f"{rsi_val:.1f}")

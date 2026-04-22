@@ -232,10 +232,13 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
             with cols[j % 5]:
                 st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
                 
-                # Esto ya lo tenías (Señal de precio)
-                if "CALL" in res['S']: st.success(res['S'])
-                elif "PUT" in res['S']: st.error(res['S'])
-                else: st.info(res['S'])
+                if "CALL" in res['S']: st.success(res['S']) [cite: 20]
+                elif "PUT" in res['S']: st.error(res['S']) [cite: 20]
+                else: st.info(res['S']) [cite: 20]
+                
+                # --- NUEVO BLOQUE: Mostrar Martillo si existe ---
+                if res['M']:
+                    st.warning(f"🎯 {res['M']}")
                 
                 # --- ESTO ES LO NUEVO QUE REEMPLAZA/SE AGREGA AL FINAL DEL BLOQUE ---
                 if res['VT'] == "success": 

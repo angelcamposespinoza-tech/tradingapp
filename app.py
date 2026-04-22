@@ -221,32 +221,39 @@ sectores = {
     "⚡ Energía/Otros": ["XOM", "TSLA", "META", "NFLX", "SPY"]
 }
 
-# --- REEMPLAZA TU BLOQUE POR ESTE ---
+
+# --- REEMPLAZA TU BLOQUE DE TABS POR ESTE ---
 tabs = st.tabs(list(sectores.keys()))
 
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
     with tabs[i]:
         datos_sector = escanear_mercado(lista_tickers, v_intervalo, v_periodo)
-        cols = st.columns(5)
-        for j, res in enumerate(datos_sector):
+        cols = st.columns(5) # 
+        for j, res in enumerate(datos_sector): # 
             with cols[j % 5]:
-                st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
+                # 1. Nombre y Precio
+                st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}") # 
                 
-                if "CALL" in res['S']: st.success(res['S']) [cite: 20]
-                elif "PUT" in res['S']: st.error(res['S']) [cite: 20]
-                else: st.info(res['S']) [cite: 20]
+                # 2. Señal de Estrategia (CALL/PUT)
+                if "CALL" in res['S']: 
+                    st.success(res['S']) # [cite: 20]
+                elif "PUT" in res['S']: 
+                    st.error(res['S']) # [cite: 20]
+                else: 
+                    st.info(res['S']) # [cite: 20]
                 
-                # --- NUEVO BLOQUE: Mostrar Martillo si existe ---
-                if res['M']:
+                # 3. NUEVO: Alerta de Martillo (🔨)
+                # Solo se muestra si la lógica detectó un martillo
+                if res.get('M'):
                     st.warning(f"🎯 {res['M']}")
                 
-                # --- ESTO ES LO NUEVO QUE REEMPLAZA/SE AGREGA AL FINAL DEL BLOQUE ---
+                # 4. Info de Volumen
                 if res['VT'] == "success": 
-                    st.caption(f"🔥 {res['V']}")
+                    st.caption(f"🔥 {res['V']}") # [cite: 21]
                 elif res['VT'] == "error": 
-                    st.caption(f"⚠️ {res['V']}")
+                    st.caption(f"⚠️ {res['V']}") # [cite: 21]
                 else: 
-                    st.caption(f"💤 {res['V']}")
+                    st.caption(f"💤 {res['V']}") # [cite: 22]
 
 st.markdown("---")
 

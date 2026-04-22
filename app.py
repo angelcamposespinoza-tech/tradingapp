@@ -122,27 +122,24 @@ def analizar_volumen(df):
         return "😴 Bajo Volumen (Espera)", "warning"
 
 def detectar_martillos(df):
-    """
-    Detecta patrones de velas Martillo (CALL) y Martillo Invertido (PUT)
-    basado en las proporciones de la última vela.
-    """
     ultimo = df.iloc[-1]
     cuerpo = abs(ultimo['Open'] - ultimo['Close'])
     mecha_superior = ultimo['High'] - max(ultimo['Open'], ultimo['Close'])
     mecha_inferior = min(ultimo['Open'], ultimo['Close']) - ultimo['Low']
-    rango_total = ultimo['High'] - ultimo['Low']
+    
+    if cuerpo == 0: cuerpo = 0.001 # Evitar división por cero
 
-    if rango_total == 0: return None
+    # 🔨 MARTILLO CALL (Ahora exige ser VERDE y mecha gigante abajo)
+    if (mecha_inferior > (cuerpo * 2.5) and 
+        mecha_superior < (cuerpo * 0.5) and 
+        ultimo['Close'] > ultimo['Open']): # <-- FILTRO VERDE
+        return "🔨 MARTILLO DETECTADO (CALL)"
 
-    # LÓGICA MARTILLO (Dirección potencial ALZA - Imagen 1)
-    # Cuerpo pequeño, mecha inferior muy larga (al menos 2x el cuerpo)
-    if mecha_inferior > (cuerpo * 2) and mecha_superior < (cuerpo * 0.5):
-        return "🔨 Martillo (CALL)"
-
-    # LÓGICA MARTILLO INVERTIDO (Dirección potencial BAJA - Imagen 2)
-    # Cuerpo pequeño, mecha superior muy larga (al menos 2x el cuerpo)
-    if mecha_superior > (cuerpo * 2) and mecha_inferior < (cuerpo * 0.5):
-        return "☄️ M. Invertido (PUT)"
+    # ☄️ MARTILLO INV. / SHOOTING STAR (Ahora exige ser ROJO y mecha gigante arriba)
+    if (mecha_superior > (cuerpo * 2.5) and 
+        mecha_inferior < (cuerpo * 0.5) and 
+        ultimo['Close'] < ultimo['Open']): # <-- FILTRO ROJO
+        return "☄️ MARTILLO INV. DETECTADO (PUT)"
 
     return None
     

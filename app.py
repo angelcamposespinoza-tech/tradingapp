@@ -127,19 +127,19 @@ def detectar_martillos(df):
     mecha_superior = ultimo['High'] - max(ultimo['Open'], ultimo['Close'])
     mecha_inferior = min(ultimo['Open'], ultimo['Close']) - ultimo['Low']
     
-    if cuerpo == 0: cuerpo = 0.001 # Evitar división por cero
+    if cuerpo == 0: cuerpo = 0.001 
 
-    # 🔨 MARTILLO CALL (Ahora exige ser VERDE y mecha gigante abajo)
+    # --- LÓGICA CALL: Mecha larga ABAJO + Vela VERDE ---
     if (mecha_inferior > (cuerpo * 2.5) and 
         mecha_superior < (cuerpo * 0.5) and 
-        ultimo['Close'] > ultimo['Open']): # <-- FILTRO VERDE
-        return "🔨 MARTILLO DETECTADO (CALL)"
+        ultimo['Close'] > ultimo['Open']): # Candado Verde
+        return "🔨 MARTILLO (CALL)"
 
-    # ☄️ MARTILLO INV. / SHOOTING STAR (Ahora exige ser ROJO y mecha gigante arriba)
+    # --- LÓGICA PUT: Mecha larga ARRIBA + Vela ROJA ---
     if (mecha_superior > (cuerpo * 2.5) and 
         mecha_inferior < (cuerpo * 0.5) and 
-        ultimo['Close'] < ultimo['Open']): # <-- FILTRO ROJO
-        return "☄️ MARTILLO INV. DETECTADO (PUT)"
+        ultimo['Close'] < ultimo['Open']): # Candado Rojo
+        return "☄️ MARTILLO INV. (PUT)"
 
     return None
     

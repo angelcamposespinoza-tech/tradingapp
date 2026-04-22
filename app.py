@@ -183,32 +183,27 @@ def escanear_mercado(lista, inter, peri):
         try:
             df = yf.download(t, period=peri, interval=inter, progress=False)
             if not df.empty:
-                if df.columns.nlevels > 1: 
-                    df.columns = df.columns.get_level_values(0)
+                if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
                 
                 rsi = calcular_rsi(df['Close']).iloc[-1]
                 precio = df['Close'].iloc[-1]
                 ema200 = calcular_ema(df['Close'], 200).iloc[-1]
                 señal = obtener_etiqueta_pro(rsi, precio, ema200)
-                
-                # --- Análisis de Volumen ---
                 vol_txt, vol_tipo = analizar_volumen(df)
                 
-                # --- NUEVA LOGICA: Detección de Martillos ---
-                # Esta línea llama a la función que analiza la forma de la vela
-                martillo = detectar_martillos(df)
-                
+                # --- NUEVA LÓGICA DOBLE ---
+                # Analizamos la vela que se está moviendo ahorita
+                m_actual = detectar_martillos(df.iloc[[-1]]) 
+                # Analizamos la vela que ya cerró
+                m_pasada = detectar_martillos(df.iloc[[-2]]) 
+
                 resultados.append({
-                    "T": t, 
-                    "P": float(precio), 
-                    "R": float(rsi), 
-                    "S": señal, 
-                    "V": vol_txt, 
-                    "VT": vol_tipo,
-                    "M": martillo  # <-- Guardamos el martillo detectado (o None si no hay)
+                    "T": t, "P": float(precio), "R": float(rsi), 
+                    "S": señal, "V": vol_txt, "VT": vol_tipo,
+                    "MA": m_actual, # Martillo Actual
+                    "MP": m_pasada  # Martillo Pasado
                 })
-        except: 
-            continue
+        except: continue
     return resultados
 
 st.subheader("📊 Monitor de Sectores")
@@ -228,33 +223,36 @@ tabs = st.tabs(list(sectores.keys()))
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
     with tabs[i]:
         datos_sector = escanear_mercado(lista_tickers, v_intervalo, v_periodo)
-        cols = st.columns(5) # 
-        for j, res in enumerate(datos_sector): # 
+        cols = st.columns(5)
+        for j, res in enumerate(datos_sector):
             with cols[j % 5]:
                 # 1. Nombre y Precio
-                st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}") # 
+                st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
                 
                 # 2. Señal de Estrategia (CALL/PUT)
                 if "CALL" in res['S']: 
-                    st.success(res['S']) # [cite: 20]
+                    st.success(res['S'])
                 elif "PUT" in res['S']: 
-                    st.error(res['S']) # [cite: 20]
+                    st.error(res['S'])
                 else: 
-                    st.info(res['S']) # [cite: 20]
+                    st.info(res['S'])
                 
-                # 3. NUEVO: Alerta de Martillo (🔨)
-                # Solo se muestra si la lógica detectó un martillo
-                if res.get('M'):
-                    st.warning(f"🎯 {res['M']}")
+                # 3. NUEVO: Doble Alerta de Martillo (🔨)
+                # Primero mostramos el confirmado (Vela Pasada) por ser más importante
+                if res.get('MP'):
+                    st.warning(f"✅ CONFIRMADO: {res['MP']}")
+                
+                # Luego mostramos el que se está formando (Vela Actual)
+                if res.get('MA'):
+                    st.info(f"⏳ FORMÁNDOSE: {res['MA']}")
                 
                 # 4. Info de Volumen
                 if res['VT'] == "success": 
-                    st.caption(f"🔥 {res['V']}") # [cite: 21]
+                    st.caption(f"🔥 {res['V']}")
                 elif res['VT'] == "error": 
-                    st.caption(f"⚠️ {res['V']}") # [cite: 21]
+                    st.caption(f"⚠️ {res['V']}")
                 else: 
-                    st.caption(f"💤 {res['V']}") # [cite: 22]
-
+                    st.caption(f"💤 {res['V']}")
 st.markdown("---")
 
 # 3. ANÁLISIS DETALLADO

@@ -120,6 +120,32 @@ def analizar_volumen(df):
         return "📉 VOLUMEN FUERTE (PUT)", "error"
     else:
         return "😴 Bajo Volumen (Espera)", "warning"
+
+def detectar_martillos(df):
+    """
+    Detecta patrones de velas Martillo (CALL) y Martillo Invertido (PUT)
+    basado en las proporciones de la última vela.
+    """
+    ultimo = df.iloc[-1]
+    cuerpo = abs(ultimo['Open'] - ultimo['Close'])
+    mecha_superior = ultimo['High'] - max(ultimo['Open'], ultimo['Close'])
+    mecha_inferior = min(ultimo['Open'], ultimo['Close']) - ultimo['Low']
+    rango_total = ultimo['High'] - ultimo['Low']
+
+    if rango_total == 0: return None
+
+    # LÓGICA MARTILLO (Dirección potencial ALZA - Imagen 1)
+    # Cuerpo pequeño, mecha inferior muy larga (al menos 2x el cuerpo)
+    if mecha_inferior > (cuerpo * 2) and mecha_superior < (cuerpo * 0.5):
+        return "🔨 Martillo (CALL)"
+
+    # LÓGICA MARTILLO INVERTIDO (Dirección potencial BAJA - Imagen 2)
+    # Cuerpo pequeño, mecha superior muy larga (al menos 2x el cuerpo)
+    if mecha_superior > (cuerpo * 2) and mecha_inferior < (cuerpo * 0.5):
+        return "☄️ M. Invertido (PUT)"
+
+    return None
+    
 # --- BARRA LATERAL ---
 st.sidebar.header("💰 Gestión de Capital")
 capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
@@ -149,7 +175,7 @@ if st.sidebar.button("Actualizar Historial y Aciertos"):
 st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
-@st.cache_data(ttl=60)
+
 @st.cache_data(ttl=60)
 def escanear_mercado(lista, inter, peri):
     resultados = []
@@ -157,20 +183,32 @@ def escanear_mercado(lista, inter, peri):
         try:
             df = yf.download(t, period=peri, interval=inter, progress=False)
             if not df.empty:
-                if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
+                if df.columns.nlevels > 1: 
+                    df.columns = df.columns.get_level_values(0)
+                
                 rsi = calcular_rsi(df['Close']).iloc[-1]
                 precio = df['Close'].iloc[-1]
                 ema200 = calcular_ema(df['Close'], 200).iloc[-1]
                 señal = obtener_etiqueta_pro(rsi, precio, ema200)
                 
-                # --- AGREGADO: Análisis de Volumen ---
+                # --- Análisis de Volumen ---
                 vol_txt, vol_tipo = analizar_volumen(df)
                 
+                # --- NUEVA LOGICA: Detección de Martillos ---
+                # Esta línea llama a la función que analiza la forma de la vela
+                martillo = detectar_martillos(df)
+                
                 resultados.append({
-                    "T": t, "P": float(precio), "R": float(rsi), 
-                    "S": señal, "V": vol_txt, "VT": vol_tipo
+                    "T": t, 
+                    "P": float(precio), 
+                    "R": float(rsi), 
+                    "S": señal, 
+                    "V": vol_txt, 
+                    "VT": vol_tipo,
+                    "M": martillo  # <-- Guardamos el martillo detectado (o None si no hay)
                 })
-        except: continue
+        except: 
+            continue
     return resultados
 
 st.subheader("📊 Monitor de Sectores")

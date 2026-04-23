@@ -123,32 +123,29 @@ def analizar_volumen(df):
 
 def detectar_martillos(df):
     ultimo = df.iloc[-1]
-    # Calculamos las dimensiones físicas de la vela 
     cuerpo = abs(ultimo['Open'] - ultimo['Close'])
     mecha_superior = ultimo['High'] - max(ultimo['Open'], ultimo['Close'])
     mecha_inferior = min(ultimo['Open'], ultimo['Close']) - ultimo['Low']
-    rango_total = ultimo['High'] - ultimo['Low']
     
-    if rango_total == 0: return None
     if cuerpo == 0: cuerpo = 0.001 
 
-    # --- MARTILLO CALL (Ultra Estricto) ---
-    # 1. La mecha inferior es 3.5 veces el cuerpo 
-    # 2. Casi no tiene mecha superior [cite: 11]
-    # 3. La vela es VERDE (Cierre > Apertura) [cite: 11]
-    if (mecha_inferior > (cuerpo * 3.5) and 
-        mecha_superior < (cuerpo * 0.3) and 
+    # --- MARTILLO CALL (Cierre en Máximos) ---
+    # 1. Mecha inferior es al menos 2.5x el cuerpo.
+    # 2. La mecha superior es casi inexistente (máximo un 10% del cuerpo).
+    # 3. La vela DEBE ser verde.
+    if (mecha_inferior > (cuerpo * 2.5) and 
+        mecha_superior < (cuerpo * 0.1) and 
         ultimo['Close'] > ultimo['Open']):
-        return "🔨 MARTILLO CLARO (CALL)"
+        return "🔨 MARTILLO PERFECTO (CALL)"
 
-    # --- MARTILLO PUT (Ultra Estricto) ---
-    # 1. La mecha superior es 3.5 veces el cuerpo 
-    # 2. Casi no tiene mecha inferior [cite: 11]
-    # 3. La vela es ROJA (Cierre < Apertura) [cite: 11]
-    if (mecha_superior > (cuerpo * 3.5) and 
-        mecha_inferior < (cuerpo * 0.3) and 
+    # --- MARTILLO PUT (Cierre en Mínimos) ---
+    # 1. Mecha superior es al menos 2.5x el cuerpo.
+    # 2. La mecha inferior es casi inexistente (máximo un 10% del cuerpo).
+    # 3. La vela DEBE ser roja.
+    if (mecha_superior > (cuerpo * 2.5) and 
+        mecha_inferior < (cuerpo * 0.1) and 
         ultimo['Close'] < ultimo['Open']):
-        return "☄️ MARTILLO INV. CLARO (PUT)"
+        return "☄️ MARTILLO INV. PERFECTO (PUT)"
 
     return None
     

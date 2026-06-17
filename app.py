@@ -121,6 +121,44 @@ def analizar_volumen(df):
     else:
         return "😴 Bajo Volumen (Espera)", "warning"
 
+def generar_mini_conclusion(res):
+    """
+    Analiza de forma integral los indicadores calculados para ofrecer una recomendación
+    con lenguaje profesional y directo.
+    """
+    # Escenario 1: Alta volatilidad - Riesgo elevado
+    if "ALTA" in res['VOLATILIDAD']:
+        if "CALL" in res['S'] or res['MA'] or res['MP']:
+            return "⚠️ OPERACIÓN DE ALTO RIESGO: Patrón alcista con volatilidad extrema. Si entras, reduce la posición."
+        if "PUT" in res['S']:
+            return "⚠️ OPERACIÓN DE ALTO RIESGO: Fuerza bajista con volatilidad elevada. Ajusta bien el Stop Loss."
+        return "⏳ ESPERA: Volatilidad muy alta sin dirección clara."
+
+    # Escenario 2: Rupturas fuertes y confirmadas con volumen
+    if res['RUPTURA'] == "🚀 TECHO ROTO" and "success" in res['VT']:
+        return "🚀 COMPRA CONFIRMADA: Ruptura de techo con volumen fuerte. Movimiento alcista con alta probabilidad."
+    if res['RUPTURA'] == "📉 PISO ROTO" and "error" in res['VT']:
+        return "📉 VENTA CONFIRMADA: Ruptura de piso con volumen fuerte. Movimiento bajista con alta probabilidad."
+
+    # Escenario 3: Patrones perfectos de velas (Martillos) en zonas clave
+    if res['MP'] == "🔨 MARTILLO PERFECTO (CALL)" or (res['MA'] == "🔨 MARTILLO PERFECTO (CALL)" and "CALL" in res['S']):
+        return "🎯 COMPRA TÉCNICA: Martillo perfecto detectado en zona de descuento. Buena relación riesgo/beneficio."
+    if res['MP'] == "☄️ MARTILLO INV. PERFECTO (PUT)" or (res['MA'] == "☄️ MARTILLO INV. PERFECTO (PUT)" and "PUT" in res['S']):
+        return "🎯 VENTA TÉCNICA: Martillo invertido en zona de resistencia. Alta probabilidad de retroceso."
+
+    # Escenario 4: Señales fuertes por tendencia y RSI, pero volumen bajo
+    if "Fuerte" in res['S'] and "Espera" in res['V']:
+        return "⏳ PACIENCIA: Los indicadores técnicos son muy buenos, pero el volumen es bajo. Espera confirmación institucional."
+
+    # Escenario 5: Alineación estándar alcista/bajista
+    if "🔥 CALL" in res['S'] and "success" in res['VT']:
+        return "📈 COMPRA ESTÁNDAR: Tendencia alcista alineada con volumen fuerte."
+    if "⚠️ PUT" in res['S'] and "error" in res['VT']:
+        return "📉 VENTA ESTÁNDAR: Tendencia bajista alineada con volumen de venta."
+
+    # Escenario por defecto
+    return "⚖️ OBSERVACIÓN: El mercado se encuentra en rango neutral. No hay una ventaja estadística clara."
+    
 def detectar_martillos(df):
     ultimo = df.iloc[-1]
     cuerpo = abs(ultimo['Open'] - ultimo['Close'])
@@ -267,8 +305,15 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
                 if res.get('MP'): st.warning(f"✅ Conf: {res['MP']}")
                 if res.get('MA'): st.info(f"⏳ Form: {res['MA']}")
                 
-                # 4. VIÑETA DESPLEGABLE CON COMPLEMENTOS
+                # 4. VIÑETA DESPLEGABLE CON COMPLEMENTOS Y CONCLUSIÓN
                 with st.expander("🔍 Ver Datos Técnicos"):
+                    # Generamos el veredicto en tiempo real con los datos guardados
+                    conclusion_final = generar_mini_conclusion(res)
+                    
+                    st.markdown("**📋 Veredicto del Scanner:**")
+                    st.info(conclusion_final)  # Destaca la conclusión en un recuadro limpio
+                    st.write("---")
+                    
                     st.markdown(f"**Ruptura:** {res['RUPTURA']}")
                     st.markdown(f"**Tendencia (EMA 200):** {res['TENDENCIA']}")
                     st.markdown(f"**Volatilidad:** {res['VOLATILIDAD']}")

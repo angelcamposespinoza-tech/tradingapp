@@ -185,26 +185,50 @@ def escanear_mercado(lista, inter, peri):
     for t in lista:
         try:
             df = yf.download(t, period=peri, interval=inter, progress=False)
-            if not df.empty:
+            if not df.empty and len(df) > 10:
                 if df.columns.nlevels > 1: df.columns = df.columns.get_level_values(0)
                 
-                rsi = calcular_rsi(df['Close']).iloc[-1]
-                precio = df['Close'].iloc[-1]
-                ema200 = calcular_ema(df['Close'], 200).iloc[-1]
-                señal = obtener_etiqueta_pro(rsi, precio, ema200)
-                vol_txt, vol_tipo = analizar_volumen(df)
+                # 1. Datos base
+                precio = float(df['Close'].iloc[-1])
+                rsi = float(calcular_rsi(df['Close']).iloc[-1])
+                ema200 = float(calcular_ema(df['Close'], 200).iloc[-1])
                 
-                # --- NUEVA LÓGICA DOBLE ---
-                # Analizamos la vela que se está moviendo ahorita
-                m_actual = detectar_martillos(df.iloc[[-1]]) 
-                # Analizamos la vela que ya cerró
-                m_pasada = detectar_martillos(df.iloc[[-2]]) 
+                # 2. Techos, pisos y rupturas del periodo
+                mitad = len(df) // 2
+                datos_pasados = df.iloc[:mitad]
+                techo_ref = float(datos_pasados['High'].max())
+                piso_ref = float(datos_pasados['Low'].min())
+                
+                ruptura = "⚖️ Dentro de Rango"
+                if precio > techo_ref:
+                    ruptura = "🚀 TECHO ROTO"
+                elif precio < piso_ref:
+                    ruptura = "📉 PISO ROTO"
+                
+                # 3. Solución a Incongruencias (Candado de estrategia)
+                # Si rompe piso o es bajista fuerte, no permitimos CALL falso por RSI
+                señal_base = obtener_etiqueta_pro(rsi, precio, ema200)
+                if ruptura == "📉 PISO ROTO" and "CALL" in señal_base:
+                    señal = "📉 PUT (Caída Libre / Ruptura)"
+                elif ruptura == "🚀 TECHO ROTO" and "PUT" in señal_base:
+                    señal = "🚀 CALL (Rally / Ruptura)"
+                else:
+                    señal = señal_base
+                
+                # 4. Volumen, Volatilidad y Tendencia
+                vol_txt, vol_tipo = analizar_volumen(df)
+                txt_volatilidad, _ = evaluar_volatilidad(df)
+                tendencia = "📈 ALCISTA" if precio > ema200 else "📉 BAJISTA"
+                
+                # 5. Martillos
+                m_actual = detectar_martillos(df.iloc[[-1]])
+                m_pasada = detectar_martillos(df.iloc[[-2]])
 
                 resultados.append({
-                    "T": t, "P": float(precio), "R": float(rsi), 
-                    "S": señal, "V": vol_txt, "VT": vol_tipo,
-                    "MA": m_actual, # Martillo Actual
-                    "MP": m_pasada  # Martillo Pasado
+                    "T": t, "P": precio, "R": rsi, "S": señal, 
+                    "V": vol_txt, "VT": vol_tipo, "MA": m_actual, "MP": m_pasada,
+                    "TECHO": techo_ref, "PISO": piso_ref, "RUPTURA": ruptura,
+                    "VOLATILIDAD": txt_volatilidad, "TENDENCIA": tendencia
                 })
         except: continue
     return resultados
@@ -220,7 +244,6 @@ sectores = {
 }
 
 
-# --- REEMPLAZA TU BLOQUE DE TABS POR ESTE ---
 tabs = st.tabs(list(sectores.keys()))
 
 for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
@@ -229,10 +252,10 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
         cols = st.columns(5)
         for j, res in enumerate(datos_sector):
             with cols[j % 5]:
-                # 1. Nombre y Precio
+                # 1. Encabezado principal
                 st.metric(res['T'], f"${res['P']:,.2f}", f"RSI: {res['R']:.1f}")
                 
-                # 2. Señal de Estrategia (CALL/PUT)
+                # 2. Señal Inteligente Corregida
                 if "CALL" in res['S']: 
                     st.success(res['S'])
                 elif "PUT" in res['S']: 
@@ -240,22 +263,19 @@ for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
                 else: 
                     st.info(res['S'])
                 
-                # 3. NUEVO: Doble Alerta de Martillo (🔨)
-                # Primero mostramos el confirmado (Vela Pasada) por ser más importante
-                if res.get('MP'):
-                    st.warning(f"✅ CONFIRMADO: {res['MP']}")
+                # 3. Alertas Rápidas de Martillos
+                if res.get('MP'): st.warning(f"✅ Conf: {res['MP']}")
+                if res.get('MA'): st.info(f"⏳ Form: {res['MA']}")
                 
-                # Luego mostramos el que se está formando (Vela Actual)
-                if res.get('MA'):
-                    st.info(f"⏳ FORMÁNDOSE: {res['MA']}")
-                
-                # 4. Info de Volumen
-                if res['VT'] == "success": 
-                    st.caption(f"🔥 {res['V']}")
-                elif res['VT'] == "error": 
-                    st.caption(f"⚠️ {res['V']}")
-                else: 
-                    st.caption(f"💤 {res['V']}")
+                # 4. VIÑETA DESPLEGABLE CON COMPLEMENTOS
+                with st.expander("🔍 Ver Datos Técnicos"):
+                    st.markdown(f"**Ruptura:** {res['RUPTURA']}")
+                    st.markdown(f"**Tendencia (EMA 200):** {res['TENDENCIA']}")
+                    st.markdown(f"**Volatilidad:** {res['VOLATILIDAD']}")
+                    st.markdown(f"**Volumen:** {res['V']}")
+                    st.write("---")
+                    st.caption(f"🏔️ Techo Ref: ${res['TECHO']:.2f}")
+                    st.caption(f"📉 Piso Ref: ${res['PISO']:.2f}")
 st.markdown("---")
 
 # 3. ANÁLISIS DETALLADO

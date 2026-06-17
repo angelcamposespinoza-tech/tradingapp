@@ -198,6 +198,23 @@ dias_vencimiento = st.sidebar.selectbox("Vencimiento", ("Hoy (0DTE)", "1 a 3 dí
 tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": ("30m", "1mo"), "1 mes o más": ("1d", "1y")}
 v_intervalo, v_periodo = tiempos[dias_vencimiento]
 
+# --- NUEVA LÓGICA DE AGREGAR TICKER POR SECTOR ---
+st.sidebar.subheader("➕ Añadir Activo Personalizado")
+nuevo_t = st.sidebar.text_input("Ticker (Ej: BABA, PFE)", value="").upper().strip()
+sector_destino = st.sidebar.selectbox("Selecciona el Sector", ("💻 Tecnología", "🏦 Financiero", "📦 Consumo", "⚡ Energía/Otros"))
+
+# Inicializamos una lista en la memoria de la sesión para guardar lo que agregues
+if "tickers_personalizados" not in st.session_state:
+    st.session_state["tickers_personalizados"] = []
+
+if st.sidebar.button("Agregar al Monitor"):
+    if nuevo_t:
+        # Guardamos el ticker junto con su sector asignado
+        st.session_state["tickers_personalizados"].append({"ticker": nuevo_t, "sector": sector_destino})
+        st.sidebar.success(f"¡{nuevo_t} agregado a {sector_destino}!")
+    else:
+        st.sidebar.error("Escribe un ticker válido.")
+
 nuevos_tickers = st.sidebar.text_input("Agregar Tickers", value="").upper()
 EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "SPY"]
 EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
@@ -273,13 +290,22 @@ def escanear_mercado(lista, inter, peri):
 
 st.subheader("📊 Monitor de Sectores")
 
-# Definimos los grupos de empresas por sector
+# Base de empresas por sector fijo
 sectores = {
     "💻 Tecnología": ["AAPL", "NVDA", "MSFT", "GOOGL", "AMD"],
     "🏦 Financiero": ["JPM", "GS", "BAC", "V", "MA"],
     "📦 Consumo": ["WMT", "COST", "AMZN", "PG", "KO"],
     "⚡ Energía/Otros": ["XOM", "TSLA", "META", "NFLX", "SPY"]
 }
+
+# Inyectamos dinámicamente los tickers personalizados que guardaste en la sesión
+if "tickers_personalizados" in st.session_state:
+    for item in st.session_state["tickers_personalizados"]:
+        sec = item["sector"]
+        tk = item["ticker"]
+        # Evitamos duplicados en las listas
+        if sec in sectores and tk not in sectores[sec]:
+            sectores[sec].append(tk)
 
 
 tabs = st.tabs(list(sectores.keys()))

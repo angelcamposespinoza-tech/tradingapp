@@ -514,3 +514,117 @@ if not data.empty and len(data) > 15:
                             st.error(f"Error: {e}")
                 else:
                     st.error("IA no configurada.")
+# --- COLOCAR AL FINAL DE TU ARCHIVO ---
+
+st.markdown("---")
+st.header("📊 Laboratorio Estadístico (Backtesting de Datos)")
+
+archivo_datos = st.file_uploader("Sube tu archivo CSV histórico (Ej: Datos históricos NVDA.csv)", type=["csv"])
+
+if archivo_datos is not None:
+    with st.spinner("Analizando patrones históricos y orden de medias..."):
+        try:
+            # Leer y limpiar datos del CSV (Formato Investing/Yahoo)
+            df_hist = pd.read_csv(archivo_datos)
+            
+            # Limpieza estándar por si los números vienen con formato de texto o comas
+            for col in ['Cierre', 'Apertura', 'Máximo', 'Mínimo']:
+                if col in df_hist.columns and df_hist[col].dtype == 'object':
+                    df_hist[col] = df_hist[col].astype(str).str.replace('.', '').str.replace(',', '.').astype(float)
+            
+            # Invertimos el dataframe para que vaya de la fecha más vieja a la más reciente
+            df_hist = df_hist.iloc[::-1].reset_index(drop=True)
+            
+            # 1. CÁLCULO DE MEDIAS MÓVILES
+            df_hist['MA20'] = df_hist['Cierre'].rolling(window=20).mean()
+            df_hist['MA40'] = df_hist['Cierre'].rolling(window=40).mean()
+            df_hist['MA100'] = df_hist['Cierre'].rolling(window=100).mean()
+            df_hist['MA200'] = df_hist['Cierre'].rolling(window=200).mean()
+            
+            # Listas para guardar aciertos
+            total_call, aciertos_call = 0, 0
+            total_put, aciertos_put = 0, 0
+            
+            # Detalles para el reporte
+            escenarios_exito_call = []
+            escenarios_exito_put = []
+
+            # 2. ESCANEO HISTÓRICO (recorremos el dataframe)
+            for i in range(200, len(df_hist) - 3): # Dejamos 3 velas adelante para ver si acertó
+                fila = df_hist.iloc[i]
+                cuerpo = abs(fila['Apertura'] - fila['Cierre'])
+                mecha_superior = fila['Máximo'] - max(fila['Apertura'], fila['Cierre'])
+                mecha_inferior = min(fila['Apertura'], fila['Cierre']) - fila['Mínimo']
+                if cuerpo == 0: cuerpo = 0.001
+                
+                # Siguientes velas para medir resultado
+                precio_futuro = df_hist['Cierre'].iloc[i+3] 
+                
+                # Identificamos el orden de las medias en ese día exacto
+                orden_correcto_alcista = fila['MA20'] > fila['MA40'] > fila['MA100'] > fila['MA200']
+                orden_correcto_bajista = fila['MA20'] < fila['MA40'] < fila['MA100'] < fila['MA200']
+                
+                abajo_de_todas = fila['Cierre'] < min(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
+                arriba_de_todas = fila['Cierre'] > max(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
+
+                # --- EVALUACIÓN DE MARTILLO CALL ---
+                if (mecha_inferior > (cuerpo * 2.5) and mecha_superior < (cuerpo * 0.1) and fila['Cierre'] > fila['Apertura']):
+                    total_call += 1
+                    ganó = precio_futuro > fila['Cierre']
+                    if ganó:
+                        aciertos_call += 1
+                        escenarios_exito_call.append({
+                            "Orden Alcista (20>40>100>200)": orden_correcto_alcista,
+                            "Abajo de todas las Medias": abajo_de_todas,
+                            "Arriba de MA200": fila['Cierre'] > fila['MA200']
+                        })
+
+                # --- EVALUACIÓN DE MARTILLO PUT ---
+                if (mecha_superior > (cuerpo * 2.5) and mecha_inferior < (cuerpo * 0.1) and fila['Cierre'] < fila['Apertura']):
+                    total_put += 1
+                    ganó = precio_futuro < fila['Cierre']
+                    if ganó:
+                        aciertos_put += 1
+                        escenarios_exito_put.append({
+                            "Orden Bajista (20<40<100<200)": orden_correcto_bajista,
+                            "Arriba de todas las Medias": arriba_de_todas,
+                            "Abajo de MA200": fila['Cierre'] < fila['MA200']
+                        })
+
+            # 3. MOSTRAR RESULTADOS EN PANTALLA
+            st.subheader("📊 Reporte de Probabilidad Estadística")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("### 🔨 Patrón Martillo (CALL)")
+                if total_call > 0:
+                    pct_call = (aciertos_call / total_call) * 100
+                    st.metric("Efectividad Histórica", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Aciertos")
+                    
+                    # Convertir escenarios a dataframe para sumas rápidas
+                    df_ex_call = pd.DataFrame(escenarios_exito_call)
+                    if not df_ex_call.empty:
+                        st.markdown("**Filtros con mayor tasa de acierto:**")
+                        st.write(f"- Cuando las medias están ordenadas a favor: **{df_ex_call['Orden Alcista (20>40>100>200)'].sum()} veces**")
+                        st.write(f"- Cuando el martillo aparece **abajo de todas las medias**: **{df_ex_call['Abajo de todas las Medias'].sum()} veces**")
+                        st.write(f"- Cuando el martillo está rebotando **arriba de la EMA 200**: **{df_ex_call['Arriba de MA200'].sum()} veces**")
+                else:
+                    st.info("No se encontraron suficientes Martillos de CALL perfectos en este archivo.")
+
+            with c2:
+                st.markdown("### ☄️ Martillo Invertido (PUT)")
+                if total_put > 0:
+                    pct_put = (aciertos_put / total_put) * 100
+                    st.metric("Efectividad Histórica", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Aciertos")
+                    
+                    df_ex_put = pd.DataFrame(escenarios_exito_put)
+                    if not df_ex_put.empty:
+                        st.markdown("**Filtros con mayor tasa de acierto:**")
+                        st.write(f"- Cuando las medias están ordenadas a favor: **{df_ex_put['Orden Bajista (20<40<100<200)'].sum()} veces**")
+                        st.write(f"- Cuando aparece **arriba de todas las medias (falso rally)**: **{df_ex_put['Arriba de todas las Medias'].sum()} veces**")
+                        st.write(f"- Cuando opera a favor de la tendencia **debajo de MA200**: **{df_ex_put['Abajo de MA200'].sum()} veces**")
+                else:
+                    st.info("No se encontraron suficientes Martillos Invertidos de PUT perfectos en este archivo.")
+
+        except Exception as e:
+            st.error(f"Error procesando el archivo CSV: {e}. Asegúrate de que las columnas tengan los nombres correctos.")

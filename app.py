@@ -605,7 +605,7 @@ if archivo_datos is not None:
                             "abajo_200": fila['Cierre'] < fila['MA200']
                         })
 
-            # 3. MOSTRAR RESULTADOS
+            # 3. MOSTRAR RESULTADOS CON PORCENTAJES REALES DE ÉXITO
             st.subheader("📊 Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
             
             c1, c2 = st.columns(2)
@@ -613,7 +613,7 @@ if archivo_datos is not None:
                 st.markdown("### 🔨 Patrón Martillo (CALL)")
                 if total_call > 0:
                     pct_call = (aciertos_call / total_call) * 100
-                    st.metric("Efectividad Histórica", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Señales")
+                    st.metric("Efectividad Histórica General", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Señales")
                     
                     with st.expander("🔍 Historial de Fechas y Cierres (CALL)"):
                         for f in fechas_martillos_call:
@@ -622,9 +622,24 @@ if archivo_datos is not None:
                     df_ex_call = pd.DataFrame(escenarios_exito_call)
                     if not df_ex_call.empty:
                         st.markdown("**Análisis de Contexto Ganador:**")
-                        st.write(f"- Con Medias Ordenadas (20>40>100>200): **{df_ex_call['orden'].sum()} aciertos**")
-                        st.write(f"- Comprando abajo de todas las medias (Piso): **{df_ex_call['abajo_todas'].sum()} aciertos**")
-                        st.write(f"- A favor de tendencia (Arriba de MA200): **{df_ex_call['arriba_200'].sum()} aciertos**")
+                        
+                        a_orden = int(df_ex_call['orden'].sum())
+                        a_piso = int(df_ex_call['abajo_todas'].sum())
+                        a_tendencia = int(df_ex_call['arriba_200'].sum())
+                        
+                        # Calculamos los porcentajes respecto al TOTAL DE ACIERTOS
+                        p_orden_call = (a_orden / aciertos_call) * 100 if aciertos_call > 0 else 0
+                        p_piso_call = (a_piso / aciertos_call) * 100 if aciertos_call > 0 else 0
+                        p_tend_call = (a_tendencia / aciertos_call) * 100 if aciertos_call > 0 else 0
+                        
+                        st.write(f"- Con Medias Ordenadas (20>40>100>200): **{a_orden} aciertos**")
+                        st.caption(f"📢 *En el {p_orden_call:.1f}% de los casos ganadores, el martillo funcionó teniendo las medias ordenadas a favor.*")
+                        
+                        st.write(f"- Comprando abajo de todas las medias (Piso): **{a_piso} aciertos**")
+                        st.caption(f"📢 *En el {p_piso_call:.1f}% de los casos ganadores, el martillo funcionó estando por debajo de todas las medias.*")
+                        
+                        st.write(f"- A favor de tendencia (Arriba de MA200): **{a_tendencia} aciertos**")
+                        st.caption(f"📢 *En el {p_tend_call:.1f}% de los casos ganadores, el martillo funcionó estando por encima de la media de 200.*")
                 else:
                     st.info("No se encontraron martillos con estas especificaciones.")
 
@@ -632,7 +647,7 @@ if archivo_datos is not None:
                 st.markdown("### ☄️ Martillo Invertido (PUT)")
                 if total_put > 0:
                     pct_put = (aciertos_put / total_put) * 100
-                    st.metric("Efectividad Histórica", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Señales")
+                    st.metric("Efectividad Histórica General", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Señales")
                     
                     with st.expander("🔍 Historial de Fechas y Cierres (PUT)"):
                         for f in fechas_martillos_put:
@@ -641,11 +656,26 @@ if archivo_datos is not None:
                     df_ex_put = pd.DataFrame(escenarios_exito_put)
                     if not df_ex_put.empty:
                         st.markdown("**Análisis de Contexto Ganador:**")
-                        st.write(f"- Con Medias Ordenadas (20<40<100<200): **{df_ex_put['orden'].sum()} aciertos**")
-                        st.write(f"- Cazando el techo (Arriba de todas las medias): **{df_ex_put['arriba_todas'].sum()} aciertos**")
-                        st.write(f"- A favor de tendencia (Debajo de MA200): **{df_ex_put['abajo_200'].sum()} aciertos**")
+                        
+                        p_orden = int(df_ex_put['orden'].sum())
+                        p_techo = int(df_ex_put['arriba_todas'].sum())
+                        p_tendencia = int(df_ex_put['abajo_200'].sum())
+                        
+                        # Calculamos los porcentajes respecto al TOTAL DE ACIERTOS
+                        p_orden_put = (p_orden / aciertos_put) * 100 if aciertos_put > 0 else 0
+                        p_techo_put = (p_techo / aciertos_put) * 100 if aciertos_put > 0 else 0
+                        p_tend_put = (p_tendencia / aciertos_put) * 100 if aciertos_put > 0 else 0
+                        
+                        st.write(f"- Con Medias Ordenadas (20<40<100<200): **{p_orden} aciertos**")
+                        st.caption(f"📢 *En el {p_orden_put:.1f}% de los casos ganadores, el martillo invertido funcionó teniendo las medias ordenadas a favor.*")
+                        
+                        st.write(f"- Cazando el techo (Arriba de todas las medias): **{p_techo} aciertos**")
+                        st.caption(f"📢 *En el {p_techo_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por encima de todas las medias.*")
+                        
+                        st.write(f"- A favor de tendencia (Debajo de MA200): **{p_tendencia} aciertos**")
+                        st.caption(f"📢 *En el {p_tend_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por debajo de la media de 200.*")
                 else:
-                    st.info("No se encontraron martillos invertidos.")
+                    st.info("No se encontraron martillos invertidos con estas especificaciones.")
 
         except Exception as e:
             st.error(f"Error procesando el archivo CSV: {e}")

@@ -522,7 +522,7 @@ st.header("📊 Laboratorio Estadístico (Backtesting de Datos)")
 archivo_datos = st.file_uploader("Sube tu archivo CSV histórico (Ej: Datos históricos NVDA.csv)", type=["csv"])
 
 if archivo_datos is not None:
-    with st.spinner("Analizando patrones históricos y orden de medias..."):
+    with st.spinner("Analizando patrones históricos con tus criterios exactos..."):
         try:
             # Leer datos
             df_hist = pd.read_csv(archivo_datos)
@@ -535,7 +535,7 @@ if archivo_datos is not None:
             # Invertimos para orden cronológico correcto (Viejo -> Nuevo)
             df_hist = df_hist.iloc[::-1].reset_index(drop=True)
             
-            # 1. CÁLCULO DE MEDIAS MÓVILES
+            # CÁLCULO DE MEDIAS MÓVILES
             df_hist['MA20'] = df_hist['Cierre'].rolling(window=20).mean()
             df_hist['MA40'] = df_hist['Cierre'].rolling(window=40).mean()
             df_hist['MA100'] = df_hist['Cierre'].rolling(window=100).mean()
@@ -544,15 +544,14 @@ if archivo_datos is not None:
             total_call, aciertos_call = 0, 0
             total_put, aciertos_put = 0, 0
             
-            # Listas para guardar las fechas y detalles de los martillos detectados
             fechas_martillos_call = []
             fechas_martillos_put = []
             
             escenarios_exito_call = []
             escenarios_exito_put = []
 
-            # 2. ESCANEO HISTÓRICO
-            for i in range(200, len(df_hist) - 3):
+            # ESCANEO HISTÓRICO (recorremos hasta len-1 porque evaluamos la vela inmediatamente siguiente)
+            for i in range(200, len(df_hist) - 1):
                 fila = df_hist.iloc[i]
                 fecha_actual = fila['Fecha']
                 cuerpo = abs(fila['Apertura'] - fila['Cierre'])
@@ -560,8 +559,8 @@ if archivo_datos is not None:
                 mecha_inferior = min(fila['Apertura'], fila['Cierre']) - fila['Mínimo']
                 if cuerpo == 0: cuerpo = 0.001
                 
-                # Resultado a 3 velas adelante
-                precio_futuro = df_hist['Cierre'].iloc[i+3] 
+                # NUEVO CRITERIO: La vela del día siguiente exactamente
+                vela_siguiente = df_hist.iloc[i+1]
                 
                 # Estados de las medias
                 orden_alcista = fila['MA20'] > fila['MA40'] > fila['MA100'] > fila['MA200']
@@ -569,13 +568,13 @@ if archivo_datos is not None:
                 abajo_de_todas = fila['Cierre'] < min(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
                 arriba_de_todas = fila['Cierre'] > max(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
 
-                # --- MARTILLO CALL FLEXIBLE ---
-                if (mecha_inferior > (cuerpo * 1.8) and mecha_superior < (cuerpo * 0.4) and fila['Cierre'] > fila['Apertura']):
+                # --- MARTILLO CALL (Cola considerable + Cierre cerca del Máximo + Verde) ---
+                if (mecha_inferior > (cuerpo * 2.0) and mecha_superior < (cuerpo * 0.15) and fila['Cierre'] > fila['Apertura']):
                     total_call += 1
-                    ganó = precio_futuro > fila['Cierre']
-                    # Guardamos la fecha y si funcionó
+                    # Criterio exacto: Cierre de mañana > Cierre de hoy
+                    ganó = vela_siguiente['Cierre'] > fila['Cierre']
                     resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
-                    fechas_martillos_call.append(f"📅 {fecha_actual} ({resultado_txt})")
+                    fechas_martillos_call.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
                     
                     if ganó:
                         aciertos_call += 1
@@ -585,12 +584,13 @@ if archivo_datos is not None:
                             "arriba_200": fila['Cierre'] > fila['MA200']
                         })
 
-                # --- MARTILLO PUT FLEXIBLE ---
-                if (mecha_superior > (cuerpo * 1.8) and mecha_inferior < (cuerpo * 0.4) and fila['Cierre'] < fila['Apertura']):
+                # --- MARTILLO PUT (Cola considerable arriba + Cierre cerca del Mínimo + Roja) ---
+                if (mecha_superior > (cuerpo * 2.0) and mecha_inferior < (cuerpo * 0.15) and fila['Cierre'] < fila['Apertura']):
                     total_put += 1
-                    ganó = precio_futuro < fila['Cierre']
+                    # Criterio exacto: Cierre de mañana < Cierre de hoy
+                    ganó = vela_siguiente['Cierre'] < fila['Cierre']
                     resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
-                    fechas_martillos_put.append(f"📅 {fecha_actual} ({resultado_txt})")
+                    fechas_martillos_put.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
                     
                     if ganó:
                         aciertos_put += 1
@@ -601,7 +601,7 @@ if archivo_datos is not None:
                         })
 
             # 3. MOSTRAR RESULTADOS
-            st.subheader("📊 Reporte de Probabilidad Estadística (Modo Flexible)")
+            st.subheader("📊 Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
             
             c1, c2 = st.columns(2)
             with c1:
@@ -610,19 +610,18 @@ if archivo_datos is not None:
                     pct_call = (aciertos_call / total_call) * 100
                     st.metric("Efectividad Histórica", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Señales")
                     
-                    # NUEVO: Desplegable con las fechas detectadas
-                    with st.expander("🔍 Ver fechas de Martillos detectados"):
+                    with st.expander("🔍 Historial de Fechas y Cierres (CALL)"):
                         for f in fechas_martillos_call:
                             st.write(f)
                     
                     df_ex_call = pd.DataFrame(escenarios_exito_call)
                     if not df_ex_call.empty:
                         st.markdown("**Análisis de Contexto Ganador:**")
-                        st.write(f"- Aciertos con Medias Ordenadas (20>40>100>200): **{df_ex_call['orden'].sum()} veces**")
-                        st.write(f"- Aciertos comprando el **piso absoluto** (abajo de todas las medias): **{df_ex_call['abajo_todas'].sum()} veces**")
-                        st.write(f"- Aciertos operando **a favor de tendencia** (arriba de MA200): **{df_ex_call['arriba_200'].sum()} veces**")
+                        st.write(f"- Con Medias Ordenadas (20>40>100>200): **{df_ex_call['orden'].sum()} aciertos**")
+                        st.write(f"- Comprando abajo de todas las medias (Piso): **{df_ex_call['abajo_todas'].sum()} aciertos**")
+                        st.write(f"- A favor de tendencia (Arriba de MA200): **{df_ex_call['arriba_200'].sum()} aciertos**")
                 else:
-                    st.info("No se encontraron martillos con los parámetros actuales.")
+                    st.info("No se encontraron martillos con estas especificaciones.")
 
             with c2:
                 st.markdown("### ☄️ Martillo Invertido (PUT)")
@@ -630,17 +629,16 @@ if archivo_datos is not None:
                     pct_put = (aciertos_put / total_put) * 100
                     st.metric("Efectividad Histórica", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Señales")
                     
-                    # NUEVO: Desplegable con las fechas detectadas
-                    with st.expander("🔍 Ver fechas de Martillos Invertidos"):
+                    with st.expander("🔍 Historial de Fechas y Cierres (PUT)"):
                         for f in fechas_martillos_put:
                             st.write(f)
                     
                     df_ex_put = pd.DataFrame(escenarios_exito_put)
                     if not df_ex_put.empty:
                         st.markdown("**Análisis de Contexto Ganador:**")
-                        st.write(f"- Aciertos con Medias Ordenadas (20<40<100<200): **{df_ex_put['orden'].sum()} veces**")
-                        st.write(f"- Aciertos cazando el **techo absoluto** (arriba de todas las medias): **{df_ex_put['arriba_todas'].sum()} veces**")
-                        st.write(f"- Aciertos operando **a favor de tendencia** (debajo de MA200): **{df_ex_put['abajo_200'].sum()} veces**")
+                        st.write(f"- Con Medias Ordenadas (20<40<100<200): **{df_ex_put['orden'].sum()} aciertos**")
+                        st.write(f"- Cazando el techo (Arriba de todas las medias): **{df_ex_put['arriba_todas'].sum()} aciertos**")
+                        st.write(f"- A favor de tendencia (Debajo de MA200): **{df_ex_put['abajo_200'].sum()} aciertos**")
                 else:
                     st.info("No se encontraron martillos invertidos.")
 

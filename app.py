@@ -535,7 +535,7 @@ if archivo_datos is not None:
             # Invertimos para orden cronológico correcto (Viejo -> Nuevo)
             df_hist = df_hist.iloc[::-1].reset_index(drop=True)
             
-            # 1. CÁLCULO DE MEDIAS MÓVILES (Simples para facilitar la muestra)
+            # 1. CÁLCULO DE MEDIAS MÓVILES
             df_hist['MA20'] = df_hist['Cierre'].rolling(window=20).mean()
             df_hist['MA40'] = df_hist['Cierre'].rolling(window=40).mean()
             df_hist['MA100'] = df_hist['Cierre'].rolling(window=100).mean()
@@ -544,12 +544,17 @@ if archivo_datos is not None:
             total_call, aciertos_call = 0, 0
             total_put, aciertos_put = 0, 0
             
+            # Listas para guardar las fechas y detalles de los martillos detectados
+            fechas_martillos_call = []
+            fechas_martillos_put = []
+            
             escenarios_exito_call = []
             escenarios_exito_put = []
 
-            # 2. ESCANEO HISTÓRICO CON TOLERANCIA REALISTA
+            # 2. ESCANEO HISTÓRICO
             for i in range(200, len(df_hist) - 3):
                 fila = df_hist.iloc[i]
+                fecha_actual = fila['Fecha']
                 cuerpo = abs(fila['Apertura'] - fila['Cierre'])
                 mecha_superior = fila['Máximo'] - max(fila['Apertura'], fila['Cierre'])
                 mecha_inferior = min(fila['Apertura'], fila['Cierre']) - fila['Mínimo']
@@ -558,17 +563,20 @@ if archivo_datos is not None:
                 # Resultado a 3 velas adelante
                 precio_futuro = df_hist['Cierre'].iloc[i+3] 
                 
-                # Estados de las medias en este día
+                # Estados de las medias
                 orden_alcista = fila['MA20'] > fila['MA40'] > fila['MA100'] > fila['MA200']
                 orden_bajista = fila['MA20'] < fila['MA40'] < fila['MA100'] < fila['MA200']
                 abajo_de_todas = fila['Cierre'] < min(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
                 arriba_de_todas = fila['Cierre'] > max(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
 
                 # --- MARTILLO CALL FLEXIBLE ---
-                # Mecha abajo al menos 1.8x el cuerpo, mecha arriba máximo 40% del cuerpo
                 if (mecha_inferior > (cuerpo * 1.8) and mecha_superior < (cuerpo * 0.4) and fila['Cierre'] > fila['Apertura']):
                     total_call += 1
                     ganó = precio_futuro > fila['Cierre']
+                    # Guardamos la fecha y si funcionó
+                    resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
+                    fechas_martillos_call.append(f"📅 {fecha_actual} ({resultado_txt})")
+                    
                     if ganó:
                         aciertos_call += 1
                         escenarios_exito_call.append({
@@ -578,10 +586,12 @@ if archivo_datos is not None:
                         })
 
                 # --- MARTILLO PUT FLEXIBLE ---
-                # Mecha arriba al menos 1.8x el cuerpo, mecha abajo máximo 40% del cuerpo
                 if (mecha_superior > (cuerpo * 1.8) and mecha_inferior < (cuerpo * 0.4) and fila['Cierre'] < fila['Apertura']):
                     total_put += 1
                     ganó = precio_futuro < fila['Cierre']
+                    resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
+                    fechas_martillos_put.append(f"📅 {fecha_actual} ({resultado_txt})")
+                    
                     if ganó:
                         aciertos_put += 1
                         escenarios_exito_put.append({
@@ -600,6 +610,11 @@ if archivo_datos is not None:
                     pct_call = (aciertos_call / total_call) * 100
                     st.metric("Efectividad Histórica", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Señales")
                     
+                    # NUEVO: Desplegable con las fechas detectadas
+                    with st.expander("🔍 Ver fechas de Martillos detectados"):
+                        for f in fechas_martillos_call:
+                            st.write(f)
+                    
                     df_ex_call = pd.DataFrame(escenarios_exito_call)
                     if not df_ex_call.empty:
                         st.markdown("**Análisis de Contexto Ganador:**")
@@ -607,13 +622,18 @@ if archivo_datos is not None:
                         st.write(f"- Aciertos comprando el **piso absoluto** (abajo de todas las medias): **{df_ex_call['abajo_todas'].sum()} veces**")
                         st.write(f"- Aciertos operando **a favor de tendencia** (arriba de MA200): **{df_ex_call['arriba_200'].sum()} veces**")
                 else:
-                    st.info("No se encontraron martillos con los nuevos parámetros.")
+                    st.info("No se encontraron martillos con los parámetros actuales.")
 
             with c2:
                 st.markdown("### ☄️ Martillo Invertido (PUT)")
                 if total_put > 0:
                     pct_put = (aciertos_put / total_put) * 100
                     st.metric("Efectividad Histórica", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Señales")
+                    
+                    # NUEVO: Desplegable con las fechas detectadas
+                    with st.expander("🔍 Ver fechas de Martillos Invertidos"):
+                        for f in fechas_martillos_put:
+                            st.write(f)
                     
                     df_ex_put = pd.DataFrame(escenarios_exito_put)
                     if not df_ex_put.empty:
@@ -622,7 +642,7 @@ if archivo_datos is not None:
                         st.write(f"- Aciertos cazando el **techo absoluto** (arriba de todas las medias): **{df_ex_put['arriba_todas'].sum()} veces**")
                         st.write(f"- Aciertos operando **a favor de tendencia** (debajo de MA200): **{df_ex_put['abajo_200'].sum()} veces**")
                 else:
-                    st.info("No se encontraron martillos invertidos con los nuevos parámetros.")
+                    st.info("No se encontraron martillos invertidos.")
 
         except Exception as e:
             st.error(f"Error procesando el archivo CSV: {e}")

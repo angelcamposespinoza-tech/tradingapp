@@ -608,6 +608,10 @@ if archivo_datos is not None:
             # 3. MOSTRAR RESULTADOS CON PORCENTAJES REALES DE ÉXITO
             st.subheader("📊 Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
             
+            # Inicializamos variables para la comparación final
+            pct_call = 0.0
+            pct_put = 0.0
+            
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("### 🔨 Patrón Martillo (CALL)")
@@ -627,7 +631,6 @@ if archivo_datos is not None:
                         a_piso = int(df_ex_call['abajo_todas'].sum())
                         a_tendencia = int(df_ex_call['arriba_200'].sum())
                         
-                        # Calculamos los porcentajes respecto al TOTAL DE ACIERTOS
                         p_orden_call = (a_orden / aciertos_call) * 100 if aciertos_call > 0 else 0
                         p_piso_call = (a_piso / aciertos_call) * 100 if aciertos_call > 0 else 0
                         p_tend_call = (a_tendencia / aciertos_call) * 100 if aciertos_call > 0 else 0
@@ -661,7 +664,6 @@ if archivo_datos is not None:
                         p_techo = int(df_ex_put['arriba_todas'].sum())
                         p_tendencia = int(df_ex_put['abajo_200'].sum())
                         
-                        # Calculamos los porcentajes respecto al TOTAL DE ACIERTOS
                         p_orden_put = (p_orden / aciertos_put) * 100 if aciertos_put > 0 else 0
                         p_techo_put = (p_techo / aciertos_put) * 100 if aciertos_put > 0 else 0
                         p_tend_put = (p_tendencia / aciertos_put) * 100 if aciertos_put > 0 else 0
@@ -676,6 +678,21 @@ if archivo_datos is not None:
                         st.caption(f"📢 *En el {p_tend_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por debajo de la media de 200.*")
                 else:
                     st.info("No se encontraron martillos invertidos con estas especificaciones.")
+
+            # --- NUEVA SECCIÓN: VEREDICTO DE MÁXIMA CERTEZA HISTÓRICA ---
+            st.markdown("---")
+            st.subheader("🏆 Veredicto de Máxima Certeza Histórica")
+            
+            if total_call == 0 and total_put == 0:
+                st.warning("No hay suficientes datos analizados para dar un veredicto de certeza.")
+            else:
+                # Comparamos cuál porcentaje fue mayor
+                if pct_call > pct_put:
+                    st.success(f"👑 **EL PATRÓN MÁS FIABLE ES EL MARTILLO DE CALL** con una efectividad del **{pct_call:.1f}%** frente al {pct_put:.1f}% del PUT. Históricamente, en este activo, es más seguro operar rebotes alcistas inmediatos tras una muestra de rechazo inferior.")
+                elif pct_put > pct_call:
+                    st.error(f"👑 **EL PATRÓN MÁS FIABLE ES EL MARTILLO INVERTIDO DE PUT** con una efectividad del **{pct_put:.1f}%** frente al {pct_call:.1f}% del CALL. Históricamente, en este activo, los rechazos en techos tienen mayor probabilidad de desplomarse al día siguiente.")
+                else:
+                    st.info(f"⚖️ **EMPATE TÉCNICO:** Ambos patrones tienen exactamente la misma efectividad histórica (**{pct_call:.1f}%**). Ambos lados del mercado responden con la misma fuerza a los rechazos por mecha.")
 
         except Exception as e:
             st.error(f"Error procesando el archivo CSV: {e}")

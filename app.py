@@ -550,7 +550,7 @@ if archivo_datos is not None:
             escenarios_exito_call = []
             escenarios_exito_put = []
 
-            # --- ESCANEO HISTÓRICO OPTIMIZADO (Bucle principal) ---
+            # --- ESCANEO HISTÓRICO CON COLA REDUCIDA (50% DEL CUERPO) ---
             for i in range(200, len(df_hist) - 1):
                 fila = df_hist.iloc[i]
                 fecha_actual = fila['Fecha']
@@ -567,16 +567,14 @@ if archivo_datos is not None:
                 abajo_de_todas = fila['Cierre'] < min(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
                 arriba_de_todas = fila['Cierre'] > max(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
 
-                # --- 🔨 MARTILLO CALL (Como tu imagen 1: Con mechita arriba permitida) ---
-                # 1. Mecha inferior es al menos el doble del cuerpo (cola considerable).
-                # 2. Mecha superior permitida hasta un 40% del tamaño del cuerpo (la mechita de tu foto).
-                # 3. Vela Verde.
-                if (mecha_inferior > (cuerpo * 2.0) and 
+                # --- 🔨 MARTILLO CALL MODIFICADO (Cola >= 50% del Cuerpo) ---
+                # Ahora la mecha inferior solo necesita ser la mitad de la caja (cuerpo * 0.5)
+                if (mecha_inferior >= (cuerpo * 0.5) and 
                     mecha_superior < (cuerpo * 0.40) and 
                     fila['Cierre'] > fila['Apertura']):
                     
                     total_call += 1
-                    ganó = vela_siguiente['Cierre'] > fila['Cierre'] # Tu nuevo criterio de acierto
+                    ganó = vela_siguiente['Cierre'] > fila['Cierre']
                     resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
                     fechas_martillos_call.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
                     
@@ -588,16 +586,14 @@ if archivo_datos is not None:
                             "arriba_200": fila['Cierre'] > fila['MA200']
                         })
 
-                # --- ☄️ MARTILLO INVERTIDO PUT (Como tu imagen 2: Con mechita abajo permitida) ---
-                # 1. Mecha superior es al menos el doble del cuerpo.
-                # 2. Mecha inferior permitida hasta un 40% del tamaño del cuerpo.
-                # 3. Vela Roja.
-                if (mecha_superior > (cuerpo * 2.0) and 
+                # --- ☄️ MARTILLO INVERTIDO PUT MODIFICADO (Cola >= 50% del Cuerpo) ---
+                # Ahora la mecha superior solo necesita ser la mitad de la caja (cuerpo * 0.5)
+                if (mecha_superior >= (cuerpo * 0.5) and 
                     mecha_inferior < (cuerpo * 0.40) and 
                     fila['Cierre'] < fila['Apertura']):
                     
                     total_put += 1
-                    ganó = vela_siguiente['Cierre'] < fila['Cierre'] # Tu nuevo criterio de acierto
+                    ganó = vela_siguiente['Cierre'] < fila['Cierre']
                     resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
                     fechas_martillos_put.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
                     

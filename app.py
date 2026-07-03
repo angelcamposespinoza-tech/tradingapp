@@ -605,7 +605,7 @@ if archivo_datos is not None:
                             "abajo_200": fila['Cierre'] < fila['MA200']
                         })
 
-            # 3. MOSTRAR RESULTADOS CON CLASIFICADOR DE MICRO-CONTEXTOS
+            # 3. MOSTRAR RESULTADOS CON PORCENTAJES REALES DE ÉXITO
             st.subheader("📊 Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
             
             pct_call = 0.0
@@ -682,7 +682,6 @@ if archivo_datos is not None:
             st.markdown("---")
             st.subheader("🎯 Matriz de Micro-Contextos (Análisis Avanzado Inter-Medias)")
             
-            # Recalculamos agrupaciones detalladas en vivo
             micro_datos_call = []
             micro_datos_put = []
             
@@ -693,13 +692,11 @@ if archivo_datos is not None:
                 m_inf = min(f['Apertura'], f['Cierre']) - f['Mínimo']
                 if cuerpo == 0: cuerpo = 0.001
                 
-                # Reglas geométricas flexibles
                 es_call = (m_inf >= (cuerpo * 0.5) and m_sup < (cuerpo * 0.4) and f['Cierre'] > f['Apertura'])
                 es_put = (m_sup >= (cuerpo * 0.5) and m_inf < (cuerpo * 0.4) and f['Cierre'] < f['Apertura'])
                 
                 if es_call:
                     ganó = df_hist.iloc[i+1]['Cierre'] > f['Cierre']
-                    # Determinar etiqueta exacta de posición de medias
                     if f['Cierre'] > f['MA200'] and f['Cierre'] < f['MA40']:
                         cat = "Arriba MA200 + Debajo MA40 (Retroceso Profundo)"
                     elif f['Cierre'] > f['MA200'] and f['Cierre'] < f['MA20'] and f['Cierre'] > f['MA40']:
@@ -708,7 +705,7 @@ if archivo_datos is not None:
                         cat = "Arriba de todas las Medias (Fuerza Máxima)"
                     else:
                         cat = "Otros escenarios (Bajo la MA200 / Rangos)"
-                    micro_datos_call.append({"Escenario": cat, "Resultado": 1 if ganó else 0})
+                    micro_datos_call.append({"Escenario": cat, "Resultado": 1 if ganó else 0, "Tipo": "CALL"})
                     
                 if es_put:
                     ganó = df_hist.iloc[i+1]['Cierre'] < f['Cierre']
@@ -718,10 +715,10 @@ if archivo_datos is not None:
                         cat = "Debajo de todas las Medias (Caída Libre)"
                     else:
                         cat = "Otros escenarios"
-                    micro_datos_put.append({"Escenario": cat, "Resultado": 1 if ganó else 0})
+                    micro_datos_put.append({"Escenario": cat, "Resultado": 1 if ganó else 0, "Tipo": "PUT"})
 
-            # Pintar Tablas de Precisión Detallada
             col_m1, col_m2 = st.columns(2)
+            df_final_combinado = pd.DataFrame() # DataFrame para unificar y buscar el ganador absoluto
             
             with col_m1:
                 st.write("**🔍 Desglose de Precisión para CALL:**")
@@ -731,6 +728,9 @@ if archivo_datos is not None:
                     df_res['% Efectividad'] = (df_res['sum'] / df_res['count']) * 100
                     df_res.columns = ["Configuración de Medias", "Señales Totales", "Aciertos", "% Efectividad"]
                     st.dataframe(df_res.style.format({"% Efectividad": "{:.1f}%"}), hide_index=True)
+                    
+                    df_res['Tipo'] = "CALL"
+                    df_final_combinado = pd.concat([df_final_combinado, df_res])
                 else:
                     st.caption("Sin datos.")
 
@@ -742,21 +742,42 @@ if archivo_datos is not None:
                     df_res_p['% Efectividad'] = (df_res_p['sum'] / df_res_p['count']) * 100
                     df_res_p.columns = ["Configuración de Medias", "Señales Totales", "Aciertos", "% Efectividad"]
                     st.dataframe(df_res_p.style.format({"% Efectividad": "{:.1f}%"}), hide_index=True)
+                    
+                    df_res_p['Tipo'] = "PUT"
+                    df_final_combinado = pd.concat([df_final_combinado, df_res_p])
                 else:
                     st.caption("Sin datos.")
 
-            # Veredicto final
+            # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
             st.markdown("---")
             st.subheader("🏆 Veredicto de Máxima Certeza Histórica")
-            if total_call == 0 and total_put == 0:
-                st.warning("No hay suficientes datos analizados para dar un veredicto de certeza.")
+            
+            if df_final_combinado.empty:
+                st.warning("No hay suficientes datos analizados para extraer una ventaja estadística.")
             else:
-                if pct_call > pct_put:
-                    st.success(f"👑 **EL PATRÓN MÁS FIABLE ES EL MARTILLO DE CALL** con una efectividad del **{pct_call:.1f}%** frente al {pct_put:.1f}% del PUT.")
-                elif pct_put > pct_call:
-                    st.error(f"👑 **EL PATRÓN MÁS FIABLE ES EL MARTILLO INVERTIDO DE PUT** con una efectividad del **{pct_put:.1f}%** frente al {pct_call:.1f}% del CALL.")
+                # Filtro de seguridad: Exigimos un mínimo de 3 señales para que sea estadísticamente válido
+                df_filtrado = df_final_combinado[df_final_combinado["Señales Totales"] >= 3]
+                
+                if not df_filtrado.empty:
+                    # Encontramos la fila con el mayor porcentaje de efectividad
+                    mejor_escenario = df_filtrado.sort_values(by="% Efectividad", ascending=False).iloc[0]
+                    
+                    nombre_config = mejor_escenario["Configuración de Medias"]
+                    efectividad_top = mejor_escenario["% Efectividad"]
+                    aciertos_top = mejor_escenario["Aciertos"]
+                    totales_top = mejor_escenario["Señales Totales"]
+                    tipo_operacion = mejor_escenario["Tipo"]
+                    
+                    icono = "🟢 [CALL]" if tipo_operacion == "CALL" else "🔴 [PUT]"
+                    
+                    st.success(
+                        f"👑 **ESTRATEGIA ÓPTIMA DETECTADA:** El escenario más certero en la historia de este activo es cuando se opera un **{tipo_operacion}** bajo la configuración: \n\n"
+                        f"👉 **{nombre_config}** \n\n"
+                        f"Este micro-contexto específico arrojó una efectividad quirúrgica del **{efectividad_top:.1f}%** "
+                        f"({aciertos_top}/{totales_top} aciertos). Cuando detectes este escenario en el monitor, tu probabilidad de éxito es máxima."
+                    )
                 else:
-                    st.info(f"⚖️ **EMPATE TÉCNICO:** Ambos patrones tienen la misma efectividad (**{pct_call:.1f}%**).")
+                    st.info("⚠️ Los escenarios con mayor porcentaje tienen muy pocas señales en el archivo. Se requiere una muestra histórica más amplia para emitir un veredicto seguro.")
 
         except Exception as e:
             st.error(f"Error procesando el archivo CSV: {e}")

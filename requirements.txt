@@ -5,3 +5,4 @@ plotly
 google-generativeai
 gspread
 google-auth
+streamlit_option_menu

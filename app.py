@@ -230,6 +230,18 @@ if st.sidebar.button("Actualizar Historial y Aciertos"):
         else:
             st.sidebar.info("Aún no hay datos para auditar.")
 # --- HASTA AQUÍ ---
+# --- MENÚ DE NAVEGACIÓN PRINCIPAL ---
+st.sidebar.markdown("---")
+st.sidebar.header("🧭 Navegación")
+apartado_seleccionado = st.sidebar.selectbox(
+    "Selecciona el Módulo",
+    ("📈 Scanner & Trading Opciones", "🏦 Inversión a Largo Plazo")
+)
+
+# =====================================================================
+# 📊 APARTADO 1: SCANNER & TRADING DE OPCIONES
+# =====================================================================
+if apartado_seleccionado == "📈 Scanner & Trading Opciones":
 st.title("🚀 SUPERIOR SCANNER")
 
 # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES

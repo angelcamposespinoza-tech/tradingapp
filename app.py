@@ -802,16 +802,250 @@ def mostrar_trading():
                 st.error(f"Error procesando el archivo CSV: {e}")
 
 # ============================================================
-# APARTADO: INVERSIÓN A LARGO PLAZO (nuevo, listo para construir)
+# APARTADO: INVERSIÓN A LARGO PLAZO
 # ============================================================
-def mostrar_largo_plazo():
-    st.title("💼 Inversión a Largo Plazo")
-    st.info("🚧 Aquí puedes empezar a construir tu módulo de largo plazo: portafolios, aportaciones periódicas, dividendos, proyecciones, etc. Dime qué necesitas y lo agregamos.")
 
-    with st.sidebar:
+# Lista de métricas fundamentales a capturar (id_interno, etiqueta visible)
+METRICAS_LP = [
+    ("gross_margin", "Gross Margin (%)"),
+    ("operative_margin", "Operating Margin (%)"),
+    ("net_margin", "Net Margin (%)"),
+    ("roa", "ROA (%)"),
+    ("roe", "ROE (%)"),
+    ("roic", "ROIC (%)"),
+    ("eps", "EPS ($)"),
+    ("fcf_sales", "Free Cash Flow / Sales (%)"),
+    ("fcf_net_income", "Free Cash Flow / Net Income (%)"),
+    ("fcf_share", "Free Cash Flow / Share ($)"),
+    ("quick_ratio", "Quick Ratio"),
+    ("current_ratio", "Current Ratio"),
+    ("debt_equity", "Debt to Equity"),
+    ("pe_ratio", "PE Ratio"),
+    ("ps_ratio", "PS Ratio"),
+    ("pe_cash_flow_ratio", "PE Cash Flow Ratio"),
+    ("price_book_ratio", "Price to Book Ratio"),
+    ("peg_ratio", "PEG Ratio"),
+]
+
+
+def _parsear_valores(texto):
+    """Convierte '12 13 14' en [12.0, 13.0, 14.0]. Acepta coma decimal."""
+    valores = []
+    for token in texto.strip().split():
+        token = token.replace(",", ".")
+        valores.append(float(token))
+    return valores
+
+
+def _resumen_metricas_texto(nombre_empresa, datos):
+    """Arma un bloque de texto plano con las métricas de una empresa, para usarlo en el prompt de la IA."""
+    lineas = [f"Empresa: {nombre_empresa}"]
+    for info in datos.values():
+        if info["promedio"] is None:
+            continue
+        etiqueta_extra = " (dato único / promedio de 5 años)" if info["es_promedio_5y"] else f" (promedio de {len(info['valores'])} dato(s): {info['valores']})"
+        lineas.append(f"- {info['label']}: {info['promedio']:.2f}{etiqueta_extra}")
+    return "\n".join(lineas)
+
+
+def mostrar_largo_plazo():
+    st.title("💼 Análisis Fundamental - Inversión a Largo Plazo")
+    st.caption("Captura los indicadores fundamentales de una empresa, guárdalos, compara contra otras y pide un análisis con IA (incluyendo contexto cualitativo de noticias).")
+
+    # --- Estado de sesión ---
+    if "lp_empresas_guardadas" not in st.session_state:
+        st.session_state["lp_empresas_guardadas"] = {}
+
+    st.markdown("---")
+    ticker_lp = st.text_input("🏷️ Ticker o Nombre de la Empresa", key="lp_ticker_actual", placeholder="Ej: AAPL")
+
+    st.info("✏️ Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
+
+    datos_actuales = {}
+    for key, label in METRICAS_LP:
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            valor_input = st.text_input(label, key=f"lp_input_{key}", placeholder="Ej: 12 13 14")
+        with col2:
+            es_promedio_5y = st.checkbox("5Y", key=f"lp_chk_{key}", help="Marca si el dato ingresado ya es el promedio de los últimos 5 años")
+
+        valores, promedio = [], None
+        if valor_input.strip():
+            try:
+                valores = _parsear_valores(valor_input)
+                if es_promedio_5y and len(valores) > 1:
+                    st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
+                promedio = sum(valores) / len(valores)
+            except ValueError:
+                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio.")
+
+        datos_actuales[key] = {
+            "label": label,
+            "valores": valores,
+            "promedio": promedio,
+            "es_promedio_5y": es_promedio_5y,
+        }
+
+    st.markdown("---")
+    col_g1, col_g2, col_g3 = st.columns(3)
+    with col_g1:
+        guardar = st.button("💾 Guardar Empresa", use_container_width=True)
+    with col_g2:
+        nueva = st.button("🆕 Limpiar Formulario", use_container_width=True)
+    with col_g3:
+        borrar_todo = st.button("🗑️ Borrar Comparaciones", use_container_width=True)
+
+    if guardar:
+        if not ticker_lp.strip():
+            st.error("Escribe un ticker o nombre para identificar la empresa antes de guardar.")
+        else:
+            st.session_state["lp_empresas_guardadas"][ticker_lp.strip().upper()] = datos_actuales
+            st.success(f"✅ Datos de {ticker_lp.strip().upper()} guardados. Puedes limpiar el formulario y capturar otra empresa para comparar.")
+
+    if nueva:
+        for key, _ in METRICAS_LP:
+            st.session_state[f"lp_input_{key}"] = ""
+            st.session_state[f"lp_chk_{key}"] = False
+        st.session_state["lp_ticker_actual"] = ""
+        st.rerun()
+
+    if borrar_todo:
+        st.session_state["lp_empresas_guardadas"] = {}
+        st.success("Comparaciones borradas.")
+        st.rerun()
+
+    # --- Resumen de lo capturado actualmente ---
+    with st.expander("📋 Ver resumen de los datos capturados en el formulario actual"):
+        hay_datos = False
+        for info in datos_actuales.values():
+            if info["promedio"] is not None:
+                hay_datos = True
+                etiqueta = "promedio 5 años (dato único)" if info["es_promedio_5y"] else f"promedio de {len(info['valores'])} año(s)"
+                st.write(f"**{info['label']}:** {info['promedio']:.2f}  _( {etiqueta} )_")
+        if not hay_datos:
+            st.caption("Aún no has llenado ningún indicador.")
+
+    # --- Tabla comparativa de empresas guardadas ---
+    empresas_guardadas = st.session_state["lp_empresas_guardadas"]
+    if empresas_guardadas:
         st.markdown("---")
-        st.header("⚙️ Configuración (Largo Plazo)")
-        st.caption("Aquí irán los controles propios de este apartado, por ejemplo horizonte de inversión, aportación mensual, perfil de riesgo, etc.")
+        st.subheader("📊 Comparación de Empresas Guardadas")
+
+        tabla = {}
+        for emp, datos in empresas_guardadas.items():
+            tabla[emp] = {
+                info["label"]: (round(info["promedio"], 2) if info["promedio"] is not None else "-")
+                for info in datos.values()
+            }
+        df_comparacion = pd.DataFrame(tabla)
+        st.dataframe(df_comparacion, use_container_width=True)
+
+    # --- Análisis con IA ---
+    st.markdown("---")
+    st.subheader("🤖 Análisis con IA")
+
+    opciones_analisis = ["Empresa actual (sin guardar)"]
+    if len(empresas_guardadas) >= 2:
+        opciones_analisis.append("Comparar empresas guardadas")
+
+    modo_analisis = st.radio("¿Qué quieres analizar?", opciones_analisis, horizontal=True)
+    incluir_cualitativo = st.checkbox("🌐 Incluir análisis cualitativo (buscar noticias e info reciente de la empresa)", value=True)
+
+    if st.button("🔍 Generar Análisis"):
+        if not model:
+            st.error("IA no configurada.")
+        else:
+            instruccion_busqueda = (
+                "Usa Google Search para investigar noticias recientes (últimos 3-6 meses), posición competitiva, "
+                "riesgos, ventajas competitivas (moat) y catalizadores relevantes de la(s) empresa(s) analizadas. "
+                "Incluye una sección de '🌐 Contexto Cualitativo' con lo que encuentres."
+            ) if incluir_cualitativo else ""
+
+            if modo_analisis == "Empresa actual (sin guardar)":
+                nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa analizada"
+                resumen = _resumen_metricas_texto(nombre_emp, datos_actuales)
+                prompt = f"""
+                Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
+                Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+
+                DATOS FUNDAMENTALES DE {nombre_emp}:
+                {resumen}
+
+                {instruccion_busqueda}
+
+                TAREA:
+                1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
+                2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
+                3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
+                4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
+                5. Si tienes contexto cualitativo, inclúyelo.
+
+                Termina SIEMPRE con una sección '📢 CONCLUSIÓN' que indique si es una buena opción para invertir a largo plazo,
+                con una calificación simple (🟢 Atractiva / 🟡 Neutral / 🔴 Riesgosa) y una justificación breve.
+                """
+            else:
+                bloques = [_resumen_metricas_texto(emp, datos) for emp, datos in empresas_guardadas.items()]
+                resumen_total = "\n\n".join(bloques)
+                prompt = f"""
+                Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
+                Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+
+                Compara las siguientes empresas con base en sus datos fundamentales:
+
+                {resumen_total}
+
+                {instruccion_busqueda}
+
+                TAREA: Compara rentabilidad, salud financiera, valuación y generación de caja entre todas las empresas.
+
+                Termina SIEMPRE con una sección '🏆 VEREDICTO' indicando cuál es la mejor opción de inversión a largo plazo
+                entre las analizadas, y por qué, en lenguaje sencillo.
+                """
+
+            with st.spinner("Analizando datos fundamentales..."):
+                try:
+                    response = model.generate_content(prompt)
+                    st.markdown(response.text)
+                except Exception as e:
+                    if "429" in str(e) or "quota" in str(e).lower():
+                        st.warning("⚠️ Cuota excedida en la búsqueda. Generando análisis solo con los datos numéricos.")
+                        try:
+                            prompt_sin_busqueda = prompt.replace(instruccion_busqueda, "")
+                            response = model.generate_content(prompt_sin_busqueda)
+                            st.markdown(response.text)
+                        except Exception as e2:
+                            st.error(f"Error: {e2}")
+                    else:
+                        st.error(f"Error generando el análisis: {e}")
+
+    # --- Chat libre sobre la empresa / comparación ---
+    st.markdown("---")
+    with st.container():
+        st.subheader("💬 Pregúntale al Analista")
+        duda_lp = st.chat_input("Pregunta algo sobre esta empresa o comparación...")
+        if duda_lp:
+            nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa actual"
+            contexto_chat = f"""
+            Eres un analista financiero fundamental. Habla en español, con lenguaje claro y sencillo.
+
+            DATOS DE LA EMPRESA EN EL FORMULARIO ({nombre_emp}):
+            {_resumen_metricas_texto(nombre_emp, datos_actuales)}
+
+            EMPRESAS GUARDADAS PARA COMPARAR: {", ".join(empresas_guardadas.keys()) if empresas_guardadas else "Ninguna guardada aún"}
+
+            PREGUNTA DEL USUARIO: {duda_lp}
+
+            Responde con base en los datos disponibles. Si la pregunta requiere información externa reciente, usa Google Search.
+            """
+            with st.chat_message("assistant"):
+                if model:
+                    try:
+                        resp = model.generate_content(contexto_chat)
+                        st.write(resp.text)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                else:
+                    st.error("IA no configurada.")
 
 
 

@@ -187,57 +187,57 @@ def detectar_martillos(df):
 
     return None
     
-# --- BARRA LATERAL ---
-st.sidebar.header("💰 Gestión de Capital")
-capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
-dinero_en_riesgo = capital_total * 0.02
-meta_ganancia = capital_total * 0.04
 
-st.sidebar.header("📋 Configuración")
-dias_vencimiento = st.sidebar.selectbox("Vencimiento", ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"), index=0)
-tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": ("30m", "1mo"), "1 mes o más": ("1d", "1y")}
-v_intervalo, v_periodo = tiempos[dias_vencimiento]
-
-# --- NUEVA LÓGICA DE AGREGAR TICKER POR SECTOR ---
-st.sidebar.subheader("➕ Añadir Activo Personalizado")
-nuevo_t = st.sidebar.text_input("Ticker (Ej: BABA, PFE)", value="").upper().strip()
-sector_destino = st.sidebar.selectbox("Selecciona el Sector", ("💻 Tecnología", "🏦 Financiero", "📦 Consumo", "⚡ Energía/Otros"))
-
-# Inicializamos una lista en la memoria de la sesión para guardar lo que agregues
-if "tickers_personalizados" not in st.session_state:
-    st.session_state["tickers_personalizados"] = []
-
-if st.sidebar.button("Agregar al Monitor"):
-    if nuevo_t:
-        # Guardamos el ticker junto con su sector asignado
-        st.session_state["tickers_personalizados"].append({"ticker": nuevo_t, "sector": sector_destino})
-        st.sidebar.success(f"¡{nuevo_t} agregado a {sector_destino}!")
-    else:
-        st.sidebar.error("Escribe un ticker válido.")
-
-nuevos_tickers = st.sidebar.text_input("Agregar Tickers", value="").upper()
-EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "SPY"]
-EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
-# --- COPIAR DESDE AQUÍ ---
-st.sidebar.markdown("---")
-st.sidebar.header("📊 Auditoría de Estrategia")
-if st.sidebar.button("Actualizar Historial y Aciertos"):
-    with st.spinner("Calculando efectividad..."):
-        aciertos, total = verificar_aciertos()
-        if total > 0:
-            porcentaje = (aciertos / total) * 100
-            st.sidebar.metric("Efectividad IA", f"{porcentaje:.1f}%", f"{aciertos}/{total} Aciertos")
-        else:
-            st.sidebar.info("Aún no hay datos para auditar.")
 # --- HASTA AQUÍ ---
 # --- MENÚ DE NAVEGACIÓN PRINCIPAL ---
-st.sidebar.markdown("---")
-st.sidebar.header("🧭 Navegación")
-apartado_seleccionado = st.sidebar.selectbox(
-    "Selecciona el Módulo",
-    ("📈 Scanner & Trading Opciones", "🏦 Inversión a Largo Plazo")
-)
-
+    st.sidebar.markdown("---")
+    st.sidebar.header("🧭 Navegación")
+    apartado_seleccionado = st.sidebar.selectbox(
+        "Selecciona el Módulo",
+        ("📈 Scanner & Trading Opciones", "🏦 Inversión a Largo Plazo")
+    )
+    # --- BARRA LATERAL ---
+    st.sidebar.header("💰 Gestión de Capital")
+    capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
+    dinero_en_riesgo = capital_total * 0.02
+    meta_ganancia = capital_total * 0.04
+    
+    st.sidebar.header("📋 Configuración")
+    dias_vencimiento = st.sidebar.selectbox("Vencimiento", ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"), index=0)
+    tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": ("30m", "1mo"), "1 mes o más": ("1d", "1y")}
+    v_intervalo, v_periodo = tiempos[dias_vencimiento]
+    
+    # --- NUEVA LÓGICA DE AGREGAR TICKER POR SECTOR ---
+    st.sidebar.subheader("➕ Añadir Activo Personalizado")
+    nuevo_t = st.sidebar.text_input("Ticker (Ej: BABA, PFE)", value="").upper().strip()
+    sector_destino = st.sidebar.selectbox("Selecciona el Sector", ("💻 Tecnología", "🏦 Financiero", "📦 Consumo", "⚡ Energía/Otros"))
+    
+    # Inicializamos una lista en la memoria de la sesión para guardar lo que agregues
+    if "tickers_personalizados" not in st.session_state:
+        st.session_state["tickers_personalizados"] = []
+    
+    if st.sidebar.button("Agregar al Monitor"):
+        if nuevo_t:
+            # Guardamos el ticker junto con su sector asignado
+            st.session_state["tickers_personalizados"].append({"ticker": nuevo_t, "sector": sector_destino})
+            st.sidebar.success(f"¡{nuevo_t} agregado a {sector_destino}!")
+        else:
+            st.sidebar.error("Escribe un ticker válido.")
+    
+    nuevos_tickers = st.sidebar.text_input("Agregar Tickers", value="").upper()
+    EMPRESAS_BASE = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AMD", "SPY"]
+    EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
+    # --- COPIAR DESDE AQUÍ ---
+    st.sidebar.markdown("---")
+    st.sidebar.header("📊 Auditoría de Estrategia")
+    if st.sidebar.button("Actualizar Historial y Aciertos"):
+        with st.spinner("Calculando efectividad..."):
+            aciertos, total = verificar_aciertos()
+            if total > 0:
+                porcentaje = (aciertos / total) * 100
+                st.sidebar.metric("Efectividad IA", f"{porcentaje:.1f}%", f"{aciertos}/{total} Aciertos")
+            else:
+                st.sidebar.info("Aún no hay datos para auditar.")
 # =====================================================================
 # 📊 APARTADO 1: SCANNER & TRADING DE OPCIONES
 # =====================================================================

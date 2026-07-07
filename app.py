@@ -109,52 +109,7 @@ def detectar_niveles(df, window=10):
         if df['Low'].iloc[i] == df['Low'].iloc[i-window:i+window].min():
             niveles.append(df['Low'].iloc[i])
     return sorted(list(set(niveles)))
-def generar_veredicto_pareto(res_en_vivo, df_final_combinado=None):
-    """
-    Analiza de forma integral el contexto actual y el backtesting histórico 
-    para dar una recomendación automática con semáforo.
-    """
-    # 1. Determinar el micro-contexto actual en base a las medias en vivo
-    # Nota: Usamos las etiquetas idénticas a las del laboratorio estadístico
-    contexto_actual = "Otros escenarios (Bajo la MA200 / Rangos)"
-    
-    if res_en_vivo['TENDENCIA'] == "📈 ALCISTA":
-        if "Debajo MA40" in res_en_vivo.get('OB_TXT', ''): # Ajuste visual si está abajo de MA40
-            contexto_actual = "Arriba MA200 + Debajo MA40 (Retroceso Profundo)"
-        elif res_en_vivo['P'] > res_en_vivo['TECHO']:
-            contexto_actual = "Arriba de todas las Medias (Fuerza Máxima)"
-        else:
-            contexto_actual = "Arriba MA200 + Debajo MA20 (Retroceso Corto)"
-            
-    # 2. Buscar si tenemos guardada la efectividad histórica de este escenario
-    efectividad_historia = None
-    if df_final_combinado is not None and not df_final_combinado.empty:
-        # Buscamos la fila que coincida con la configuración de medias actual
-        match = df_final_combinado[df_final_combinado["Configuración de Medias"] == contexto_actual]
-        if not match.empty:
-            efectividad_historia = match.iloc[0]["% Efectividad"]
 
-    # 3. Construir la conclusión Pareto en base a las confluencias
-    st.markdown("### 🏆 Veredicto Unificado Pareto (80/20)")
-    
-    # Caso Premium: El precio está mitigando un Order Block Institucional
-    if "ZONA DE COMPRA" in res_en_vivo.get('OB_TXT', ''):
-        if efectividad_historia and efectividad_historia >= 70:
-            st.success(f"🟢 **OPERACIÓN PREMIUM (Alta Certeza):** El precio está mitigando un Order Block Institucional en una zona histórica que tiene un **{efectividad_historia:.1f}% de efectividad**. La ventaja estadística está totalmente de tu lado.")
-        else:
-            st.success("🟢 **COMPRA TÉCNICA (Huella Institucional):** El precio está tocando el Order Block de los tiburones. Riesgo muy controlado. Coloca tu Stop Loss justo debajo de la zona gris.")
-            
-    # Caso de Continuación de Tendencia con Volumen
-    elif "VOLUMEN FUERTE" in res_en_vivo['V'] and "success" in res_en_vivo['VT']:
-        st.info("🟡 **OPERACIÓN DE MOMENTUM:** Hay inercia alcista confirmada por volumen institucional. Si vas a entrar, recuerda que no estás comprando barato, sino persiguiendo el movimiento.")
-        
-    # Caso donde el histórico dice que no entres
-    elif efectividad_historia and efectividad_historia < 55:
-        st.error(f"🔴 **EVITAR OPERACIÓN (Alerta del Laboratorio):** Aunque veas un patrón tentador en el gráfico, tu Laboratorio Estadístico dice que este escenario exacto solo tiene un **{efectividad_historia:.1f}% de éxito** en este activo. No operes en contra de las matemáticas.")
-        
-    # Zona de Rango Neutral sin ventaja
-    else:
-        st.warning("⚪ **ZONA NEUTRAL / ESPERA:** No hay una ventaja estadística clara en este momento. El precio está fuera del Order Block y el volumen es ordinario. Guarda el capital.")
 def calcular_atr(df, period=14):
     high_low = df['High'] - df['Low']
     high_close = (df['High'] - df['Close'].shift()).abs()
@@ -575,27 +530,6 @@ def mostrar_trading():
             # --- 4. LO QUE YA TENÍAS: Gestión de Riesgo ---
             st.error(f"SL: ${sl:.2f}")
             st.success(f"TP: ${tp:.2f}")
-            # ⬇️ PEGA ESTO NUEVO JUSTO AQUÍ DEBAJO DE LAS REGLAS DE RIESGO:
-            # Almacenamos el estado del Order Block para que el veredicto lo lea
-            ob_txt_alerta = ""
-            if ob_alcista:
-                if precio_actual <= ob_alcista["top"] and precio_actual >= ob_alcista["bottom"]:
-                    ob_txt_alerta = "ZONA DE COMPRA"
-                elif precio_actual < ob_alcista["bottom"]:
-                    ob_txt_alerta = "Debajo MA40" # Marcador de retroceso profundo
-
-            res_vivo_ind = {
-                "P": precio_actual, "TECHO": techo_ref, "PISO": piso_ref,
-                "TENDENCIA": "📈 ALCISTA" if precio_actual > ema200_actual else "📉 BAJISTA",
-                "V": vol_txt_ind, "VT": vol_tipo_ind, "OB_TXT": ob_txt_alerta
-            }
-
-            # Recuperamos la matriz del CSV si es que ya la subiste en la otra pestaña
-            matriz_csv = st.session_state.get("matriz_historica_lp", None)
-
-            st.write("---")
-            # Invocamos la herramienta de unificación de criterios
-            generar_veredicto_pareto(res_vivo_ind, matriz_csv)
 
         # --- FILA 2: NOTICIAS (ANCHO COMPLETO) ---
         st.markdown("---")
@@ -893,13 +827,6 @@ def mostrar_trading():
                         df_final_combinado = pd.concat([df_final_combinado, df_res_p])
                     else:
                         st.caption("Sin datos.")
-    
-                # ⬇️ ESTO ES LO NUEVO QUE DEBES AGREGAR (Justo aquí, alineado a la izquierda del bloque):
-                st.session_state["matriz_historica_lp"] = df_final_combinado
-    
-                # 📋 ESTA LÍNEA YA EXISTE ABAJO EN TU CÓDIGO (Te sirve de referencia para saber dónde detenerte):
-                # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
-                st.markdown("---")
 
                 # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
                 st.markdown("---")

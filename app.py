@@ -575,6 +575,27 @@ def mostrar_trading():
             # --- 4. LO QUE YA TENÍAS: Gestión de Riesgo ---
             st.error(f"SL: ${sl:.2f}")
             st.success(f"TP: ${tp:.2f}")
+            # ⬇️ PEGA ESTO NUEVO JUSTO AQUÍ DEBAJO DE LAS REGLAS DE RIESGO:
+            # Almacenamos el estado del Order Block para que el veredicto lo lea
+            ob_txt_alerta = ""
+            if ob_alcista:
+                if precio_actual <= ob_alcista["top"] and precio_actual >= ob_alcista["bottom"]:
+                    ob_txt_alerta = "ZONA DE COMPRA"
+                elif precio_actual < ob_alcista["bottom"]:
+                    ob_txt_alerta = "Debajo MA40" # Marcador de retroceso profundo
+
+            res_vivo_ind = {
+                "P": precio_actual, "TECHO": techo_ref, "PISO": piso_ref,
+                "TENDENCIA": "📈 ALCISTA" if precio_actual > ema200_actual else "📉 BAJISTA",
+                "V": vol_txt_ind, "VT": vol_tipo_ind, "OB_TXT": ob_txt_alerta
+            }
+
+            # Recuperamos la matriz del CSV si es que ya la subiste en la otra pestaña
+            matriz_csv = st.session_state.get("matriz_historica_lp", None)
+
+            st.write("---")
+            # Invocamos la herramienta de unificación de criterios
+            generar_veredicto_pareto(res_vivo_ind, matriz_csv)
 
         # --- FILA 2: NOTICIAS (ANCHO COMPLETO) ---
         st.markdown("---")
@@ -872,6 +893,13 @@ def mostrar_trading():
                         df_final_combinado = pd.concat([df_final_combinado, df_res_p])
                     else:
                         st.caption("Sin datos.")
+    
+                # ⬇️ ESTO ES LO NUEVO QUE DEBES AGREGAR (Justo aquí, alineado a la izquierda del bloque):
+                st.session_state["matriz_historica_lp"] = df_final_combinado
+    
+                # 📋 ESTA LÍNEA YA EXISTE ABAJO EN TU CÓDIGO (Te sirve de referencia para saber dónde detenerte):
+                # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
+                st.markdown("---")
 
                 # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
                 st.markdown("---")

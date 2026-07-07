@@ -66,7 +66,41 @@ def calcular_rsi(series, periods=14):
 
 def calcular_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
-
+def detectar_order_blocks(df, lookback=30):
+    """
+    Detecta el último Order Block Institucional Alcista válido en el gráfico.
+    Busca la última vela roja antes de un movimiento expansivo fuerte.
+    """
+    if len(df) < lookback:
+        return None
+        
+    # Analizamos las últimas velas (sin contar la que está en formación)
+    for i in range(len(df) - 3, len(df) - lookback, -1):
+        open_i = df['Open'].iloc[i]
+        close_i = df['Close'].iloc[i]
+        high_i = df['High'].iloc[i]
+        low_i = df['Low'].iloc[i]
+        volume_i = df['Volume'].iloc[i]
+        
+        # 1. ¿Fue una vela bajista (roja)?
+        if close_i < open_i:
+            # 2. ¿Hubo una expansión alcista fuerte inmediatamente después?
+            # Verificamos si las siguientes 2 velas subieron con fuerza y volumen superior al promedio
+            velas_posteriores = df.iloc[i+1:i+3]
+            vol_media = df['Volume'].rolling(window=20).mean().iloc[i]
+            
+            movimiento_alcista = (velas_posteriores['Close'].iloc[-1] > open_i * 1.01) # Expansión de min 1%
+            volumen_fuerte = (velas_posteriores['Volume'].max() > vol_media)
+            
+            if movimiento_alcista and volumen_fuerte:
+                # Retornamos el rango de precios del bloque institucional (Cuerpo de la vela roja)
+                return {
+                    "top": max(open_i, close_i),
+                    "bottom": low_i,
+                    "fecha": df.index[i],
+                    "precio_activacion": low_i
+                }
+    return None
 def detectar_niveles(df, window=10):
     niveles = []
     for i in range(window, len(df) - window):
@@ -98,7 +132,7 @@ def obtener_etiqueta_pro(rsi, precio, ema200):
     elif rsi > 65 and precio < ema200: return "⚠️ PUT (Fuerte)"
     elif rsi > 65: return "☁️ PUT (Técnico)"
     else: return "⚖️ Neutral"
-        
+      
 def analizar_volumen(df):
     """
     Aplica la regla del profesor ajustada a opciones:
@@ -412,8 +446,24 @@ def mostrar_trading():
             fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 20), name="EMA 20", line=dict(color='orange', width=1)), row=1, col=1)
 
             # Dibujamos SL y TP ahora que ya están definidos
+            # Estas líneas ya existen en tu código:
             fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
             fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
+            
+            # ⬇️ JUSTO AQUÍ PEGAS ESTO (Fíjate en los espacios que tiene a la izquierda):
+            ob_alcista = detectar_order_blocks(data)
+            if ob_alcista:
+                fig.add_hrect(
+                    y0=ob_alcista["bottom"], 
+                    y1=ob_alcista["top"], 
+                    fillcolor="rgba(128, 128, 128, 0.25)", 
+                    line_width=1, 
+                    line_dash="dash",
+                    line_color="gray",
+                    annotation_text="🦈 ORDER BLOCK INSTITUCIONAL", 
+                    annotation_position="top left",
+                    row=1, col=1
+                )
 
             # Niveles detectados
             niveles = detectar_niveles(data)
@@ -459,10 +509,21 @@ def mostrar_trading():
                 st.success(texto_vol)
 
             # --- 3. LO QUE YA TENÍAS: Tendencia EMA ---
+            # Estas líneas ya existen en tu código:
             if precio_actual > ema200_actual:
                 st.success("📈 ALCISTA")
             else:
                 st.error("📉 BAJISTA")
+                
+            # ⬇️ JUSTO AQUÍ PEGAS ESTO (Respetando los 12 espacios iniciales):
+            if ob_alcista:
+                if precio_actual <= ob_alcista["top"] and precio_actual >= ob_alcista["bottom"]:
+                    st.success("🦈 ¡ZONA DE COMPRA! El precio mitigando el Order Block.")
+                elif precio_actual > ob_alcista["top"]:
+                    st.info(f"⏳ Esperando retroceso a zona institucional: ${ob_alcista['top']:.2f}")
+
+            # Esta línea ya existe abajo:
+            st.write("---")
 
             st.write("---")
 

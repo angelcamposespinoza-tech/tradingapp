@@ -1,5 +1,6 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
+import re
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -66,41 +67,7 @@ def calcular_rsi(series, periods=14):
 
 def calcular_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
-def detectar_order_blocks(df, lookback=30):
-    """
-    Detecta el último Order Block Institucional Alcista válido en el gráfico.
-    Busca la última vela roja antes de un movimiento expansivo fuerte.
-    """
-    if len(df) < lookback:
-        return None
-        
-    # Analizamos las últimas velas (sin contar la que está en formación)
-    for i in range(len(df) - 3, len(df) - lookback, -1):
-        open_i = df['Open'].iloc[i]
-        close_i = df['Close'].iloc[i]
-        high_i = df['High'].iloc[i]
-        low_i = df['Low'].iloc[i]
-        volume_i = df['Volume'].iloc[i]
-        
-        # 1. ¿Fue una vela bajista (roja)?
-        if close_i < open_i:
-            # 2. ¿Hubo una expansión alcista fuerte inmediatamente después?
-            # Verificamos si las siguientes 2 velas subieron con fuerza y volumen superior al promedio
-            velas_posteriores = df.iloc[i+1:i+3]
-            vol_media = df['Volume'].rolling(window=20).mean().iloc[i]
-            
-            movimiento_alcista = (velas_posteriores['Close'].iloc[-1] > open_i * 1.01) # Expansión de min 1%
-            volumen_fuerte = (velas_posteriores['Volume'].max() > vol_media)
-            
-            if movimiento_alcista and volumen_fuerte:
-                # Retornamos el rango de precios del bloque institucional (Cuerpo de la vela roja)
-                return {
-                    "top": max(open_i, close_i),
-                    "bottom": low_i,
-                    "fecha": df.index[i],
-                    "precio_activacion": low_i
-                }
-    return None
+
 def detectar_niveles(df, window=10):
     niveles = []
     for i in range(window, len(df) - window):
@@ -132,7 +99,7 @@ def obtener_etiqueta_pro(rsi, precio, ema200):
     elif rsi > 65 and precio < ema200: return "⚠️ PUT (Fuerte)"
     elif rsi > 65: return "☁️ PUT (Técnico)"
     else: return "⚖️ Neutral"
-      
+        
 def analizar_volumen(df):
     """
     Aplica la regla del profesor ajustada a opciones:
@@ -446,24 +413,8 @@ def mostrar_trading():
             fig.add_trace(go.Scatter(x=data.index, y=calcular_ema(data['Close'], 20), name="EMA 20", line=dict(color='orange', width=1)), row=1, col=1)
 
             # Dibujamos SL y TP ahora que ya están definidos
-            # Estas líneas ya existen en tu código:
             fig.add_hline(y=tp, line_dash="dot", line_color="green", annotation_text="TP", row=1, col=1)
             fig.add_hline(y=sl, line_dash="dot", line_color="red", annotation_text="SL", row=1, col=1)
-            
-            # ⬇️ JUSTO AQUÍ PEGAS ESTO (Fíjate en los espacios que tiene a la izquierda):
-            ob_alcista = detectar_order_blocks(data)
-            if ob_alcista:
-                fig.add_hrect(
-                    y0=ob_alcista["bottom"], 
-                    y1=ob_alcista["top"], 
-                    fillcolor="rgba(128, 128, 128, 0.25)", 
-                    line_width=1, 
-                    line_dash="dash",
-                    line_color="gray",
-                    annotation_text="🦈 ORDER BLOCK INSTITUCIONAL", 
-                    annotation_position="top left",
-                    row=1, col=1
-                )
 
             # Niveles detectados
             niveles = detectar_niveles(data)
@@ -509,21 +460,10 @@ def mostrar_trading():
                 st.success(texto_vol)
 
             # --- 3. LO QUE YA TENÍAS: Tendencia EMA ---
-            # Estas líneas ya existen en tu código:
             if precio_actual > ema200_actual:
                 st.success("📈 ALCISTA")
             else:
                 st.error("📉 BAJISTA")
-                
-            # ⬇️ JUSTO AQUÍ PEGAS ESTO (Respetando los 12 espacios iniciales):
-            if ob_alcista:
-                if precio_actual <= ob_alcista["top"] and precio_actual >= ob_alcista["bottom"]:
-                    st.success("🦈 ¡ZONA DE COMPRA! El precio mitigando el Order Block.")
-                elif precio_actual > ob_alcista["top"]:
-                    st.info(f"⏳ Esperando retroceso a zona institucional: ${ob_alcista['top']:.2f}")
-
-            # Esta línea ya existe abajo:
-            st.write("---")
 
             st.write("---")
 
@@ -909,6 +849,17 @@ def _resumen_metricas_texto(nombre_empresa, datos):
     return "\n".join(lineas)
 
 
+def _extraer_calificacion(texto, etiqueta):
+    """Busca una línea tipo 'ETIQUETA: 7.5/10' en el texto de respuesta de la IA y devuelve el número."""
+    match = re.search(rf'{etiqueta}:\s*([\d.]+)\s*/\s*10', texto)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
 def mostrar_largo_plazo():
     st.title("💼 Análisis Fundamental - Inversión a Largo Plazo")
     st.caption("Captura los indicadores fundamentales de una empresa, guárdalos, compara contra otras y pide un análisis con IA (incluyendo contexto cualitativo de noticias).")
@@ -1015,55 +966,205 @@ def mostrar_largo_plazo():
     if st.button("🔍 Generar Análisis"):
         if not model:
             st.error("IA no configurada.")
+
+        elif modo_analisis == "Empresa actual (sin guardar)":
+            nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa analizada"
+            resumen = _resumen_metricas_texto(nombre_emp, datos_actuales)
+
+            # --- PROMPT 1: ANÁLISIS CUANTITATIVO ---
+            prompt_cuant = f"""
+            Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
+            Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+
+            DATOS FUNDAMENTALES DE {nombre_emp}:
+            {resumen}
+
+            TAREA:
+            1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
+            2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
+            3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
+            4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
+            5. IMPORTANTE: evalúa si los márgenes y demás indicadores son CONSISTENTES en el tiempo o
+               presentan alta volatilidad/tendencia negativa. Usa los datos por año que vienen entre paréntesis
+               junto a cada indicador (no solo el promedio) para juzgar esta consistencia.
+
+            Termina con una sección '📢 CONCLUSIÓN CUANTITATIVA' explicando el resultado.
+            Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+            CALIFICACIÓN_CUANTITATIVA: X/10
+            (reemplaza X por tu calificación del 1 al 10 sobre la solidez cuantitativa de la empresa)
+            """
+
+            with st.spinner("Analizando indicadores cuantitativos..."):
+                try:
+                    texto_cuant = model.generate_content(prompt_cuant).text
+                except Exception as e:
+                    st.error(f"Error en el análisis cuantitativo: {e}")
+                    texto_cuant = None
+
+            texto_cual = None
+            if incluir_cualitativo and texto_cuant is not None:
+                # --- PROMPT 2: ANÁLISIS CUALITATIVO (4 pilares) ---
+                prompt_cual = f"""
+                Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
+                noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
+                reciente. Evalúa los siguientes 4 pilares con evidencia real (no supuestos):
+
+                1. MODELO DE NEGOCIO
+                - ¿Su propuesta de valor genera baja o alta tasa de abandono (churn) de clientes?
+                - ¿Su crecimiento es orgánico o depende de fuertes campañas de publicidad/marketing?
+                - ¿El cliente usa el producto o servicio de forma recurrente?
+                - ¿La empresa puede subir precios (inelástica) o es sensible al precio (elástica)?
+                - ¿Tiene bajo o alto costo de adquisición de clientes (CAC)?
+                - ¿Tiene altas devoluciones o quejas de clientes?
+                - ¿Tiene capacidad real de innovar?
+                - ¿Se ve obligada a hacer descuentos constantemente?
+                - ¿Sus productos se perciben distintos a los de la competencia?
+                - ¿Qué tan fácil es para la competencia copiar sus innovaciones?
+                - ¿Necesita invertir masivamente solo para mantener su posición actual?
+                - ¿Sus ingresos son recurrentes o dependen de compras grandes y únicas?
+                - ¿Gana más por cliente conforme crece?
+                - ¿Tiene productos o servicios diversificados?
+                - ¿Sus ingresos están distribuidos geográficamente o dependen de una sola región?
+                - ¿Algún cliente representa más del 5% de los ingresos totales? (excepto negocios B2B)
+
+                2. VENTAJA COMPETITIVA (MOAT)
+                - ¿Tiene un monopolio natural o el mercado es fácil de fragmentar?
+                - ¿El costo de adquisición de clientes se reduce con el tiempo?
+                - ¿Sus productos o servicios son fáciles de sustituir?
+                - ¿Qué tan fácil es para un cliente migrar a la competencia?
+                - ¿La marca tiene valor emocional/lealtad?
+                - ¿Sus patentes son fuertes o débiles?
+                - ¿Posee datos exclusivos o propietarios?
+                - ¿Tiene economías de escala reales?
+                - ¿Tiene acceso exclusivo a materias primas o insumos clave?
+                - ¿Tiene procesos propios únicos o son estándar de la industria?
+
+                3. EQUIPO DIRECTIVO Y CULTURA EMPRESARIAL
+                - ¿El equipo directivo tiene varios años de experiencia o hay alta rotación?
+                - ¿Las compensaciones son a largo plazo (acciones) o a corto plazo?
+                - ¿Los directivos tienen participación accionaria significativa?
+                - ¿La gerencia es transparente con inversionistas?
+                - ¿El CEO es prudente en la asignación de capital?
+                - ¿La junta directiva es independiente y justa, o son familiares/amigos?
+                - ¿La empresa tiene baja rotación de empleados?
+                - ¿La organización se enfoca en resolver problemas del cliente o en intereses propios?
+                - ¿Son éticos y reconocidos por ello?
+
+                4. OPORTUNIDADES Y RIESGOS DE LA INDUSTRIA
+                - ¿El mercado está creciendo o cayendo?
+                - ¿El mercado está fragmentado con oportunidad de crecimiento, o dominado por 2-3 grandes
+                  jugadores? (evalúa si la empresa analizada es uno de ellos)
+                - ¿La empresa se beneficia o se ve perjudicada por cambios demográficos futuros?
+                - ¿La empresa forma parte de un oligopolio?
+                - ¿Tiene poder real sobre los precios de su industria?
+                - ¿Tiene baja o alta amenaza de productos sustitutos?
+                - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
+                - ¿El país donde opera tiene un sistema legal fuerte o débil?
+
+                FORMATO DE RESPUESTA: Para cada uno de los 4 pilares, da un resumen breve con evidencia
+                encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil.
+
+                Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 4 pilares.
+                Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+                CALIFICACIÓN_CUALITATIVA: X/10
+                (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio)
+                """
+                with st.spinner("Investigando y analizando el contexto cualitativo..."):
+                    try:
+                        texto_cual = model.generate_content(prompt_cual).text
+                    except Exception as e:
+                        if "429" in str(e) or "quota" in str(e).lower():
+                            st.warning("⚠️ Cuota de búsqueda excedida. Generando el análisis cualitativo sin Google Search.")
+                            try:
+                                prompt_cual_sin_busqueda = prompt_cual.replace("usando Google Search para investigar", "basándote en tu conocimiento general sobre")
+                                texto_cual = model.generate_content(prompt_cual_sin_busqueda).text
+                            except Exception as e2:
+                                st.error(f"Error en el análisis cualitativo: {e2}")
+                        else:
+                            st.error(f"Error en el análisis cualitativo: {e}")
+
+            # --- Mostrar resultados individuales ---
+            if texto_cuant is not None:
+                score_cuant = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
+                st.markdown("### 📐 Análisis Cuantitativo")
+                st.markdown(texto_cuant)
+                if score_cuant is not None:
+                    st.metric("Calificación Cuantitativa", f"{score_cuant:.1f}/10")
+
+            score_cual = None
+            if texto_cual is not None:
+                score_cual = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
+                st.markdown("---")
+                st.markdown("### 🌐 Análisis Cualitativo")
+                st.markdown(texto_cual)
+                if score_cual is not None:
+                    st.metric("Calificación Cualitativa", f"{score_cual:.1f}/10")
+
+            # --- PROMPT 3: SÍNTESIS / CONCLUSIÓN GENERAL ---
+            if texto_cuant is not None and texto_cual is not None:
+                score_cuant_local = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
+                score_cual_local = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
+                promedio_general = (
+                    round((score_cuant_local + score_cual_local) / 2, 1)
+                    if (score_cuant_local is not None and score_cual_local is not None) else None
+                )
+
+                prompt_sintesis = f"""
+                Eres un analista financiero senior. Tienes dos análisis independientes de {nombre_emp}:
+
+                === ANÁLISIS CUANTITATIVO (calificación {score_cuant_local}/10) ===
+                {texto_cuant}
+
+                === ANÁLISIS CUALITATIVO (calificación {score_cual_local}/10) ===
+                {texto_cual}
+
+                TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa, combinando ambos análisis:
+                indica si {nombre_emp} es una buena opción de inversión a largo plazo, qué pesa más
+                (lo cuantitativo o lo cualitativo) y por qué. No repitas todo el detalle, sintetiza lo esencial.
+
+                Después de tu conclusión, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+                CALIFICACIÓN_PROMEDIO: {promedio_general if promedio_general is not None else "X"}/10
+                """
+                with st.spinner("Generando conclusión general..."):
+                    try:
+                        texto_sintesis = model.generate_content(prompt_sintesis).text
+                        st.markdown("---")
+                        st.markdown("### 🏁 Conclusión General")
+                        st.markdown(texto_sintesis)
+                        if promedio_general is not None:
+                            st.metric("Calificación Promedio General", f"{promedio_general:.1f}/10")
+                    except Exception as e:
+                        st.error(f"Error generando la conclusión general: {e}")
+
         else:
+            # --- Modo: Comparar empresas guardadas (análisis cuantitativo comparativo) ---
+            bloques = [_resumen_metricas_texto(emp, datos) for emp, datos in empresas_guardadas.items()]
+            resumen_total = "\n\n".join(bloques)
             instruccion_busqueda = (
                 "Usa Google Search para investigar noticias recientes (últimos 3-6 meses), posición competitiva, "
-                "riesgos, ventajas competitivas (moat) y catalizadores relevantes de la(s) empresa(s) analizadas. "
-                "Incluye una sección de '🌐 Contexto Cualitativo' con lo que encuentres."
+                "riesgos, ventajas competitivas (moat) y catalizadores relevantes de cada empresa. "
+                "Incluye una sección de '🌐 Contexto Cualitativo' con lo que encuentres para cada una."
             ) if incluir_cualitativo else ""
 
-            if modo_analisis == "Empresa actual (sin guardar)":
-                nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa analizada"
-                resumen = _resumen_metricas_texto(nombre_emp, datos_actuales)
-                prompt = f"""
-                Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
-                Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+            prompt = f"""
+            Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
+            Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
 
-                DATOS FUNDAMENTALES DE {nombre_emp}:
-                {resumen}
+            Compara las siguientes empresas con base en sus datos fundamentales:
 
-                {instruccion_busqueda}
+            {resumen_total}
 
-                TAREA:
-                1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
-                2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
-                3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
-                4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
-                5. Si tienes contexto cualitativo, inclúyelo.
+            {instruccion_busqueda}
 
-                Termina SIEMPRE con una sección '📢 CONCLUSIÓN' que indique si es una buena opción para invertir a largo plazo,
-                con una calificación simple (🟢 Atractiva / 🟡 Neutral / 🔴 Riesgosa) y una justificación breve.
-                """
-            else:
-                bloques = [_resumen_metricas_texto(emp, datos) for emp, datos in empresas_guardadas.items()]
-                resumen_total = "\n\n".join(bloques)
-                prompt = f"""
-                Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
-                Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+            TAREA: Compara rentabilidad, salud financiera, valuación y generación de caja entre todas las empresas.
+            Evalúa también si los márgenes de cada una son consistentes en el tiempo o volátiles, usando los
+            datos por año que vienen entre paréntesis junto a cada indicador.
 
-                Compara las siguientes empresas con base en sus datos fundamentales:
+            Termina SIEMPRE con una sección '🏆 VEREDICTO' indicando cuál es la mejor opción de inversión a largo plazo
+            entre las analizadas, y por qué, en lenguaje sencillo.
+            """
 
-                {resumen_total}
-
-                {instruccion_busqueda}
-
-                TAREA: Compara rentabilidad, salud financiera, valuación y generación de caja entre todas las empresas.
-
-                Termina SIEMPRE con una sección '🏆 VEREDICTO' indicando cuál es la mejor opción de inversión a largo plazo
-                entre las analizadas, y por qué, en lenguaje sencillo.
-                """
-
-            with st.spinner("Analizando datos fundamentales..."):
+            with st.spinner("Analizando y comparando empresas..."):
                 try:
                     response = model.generate_content(prompt)
                     st.markdown(response.text)

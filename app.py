@@ -250,7 +250,7 @@ def mostrar_trading():
             else:
                 st.sidebar.info("Aún no hay datos para auditar.")
     # --- HASTA AQUÍ ---
-    st.title("🚀 SUPERIOR SCANNER")
+    st.title("🚀 SUPERIOR SCANNERR")
 
     # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 

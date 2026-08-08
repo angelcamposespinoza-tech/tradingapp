@@ -970,171 +970,175 @@ def mostrar_largo_plazo():
         elif modo_analisis == "Empresa actual (sin guardar)":
             nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa analizada"
             resumen = _resumen_metricas_texto(nombre_emp, datos_actuales)
+            hay_datos_cuant = any(info["promedio"] is not None for info in datos_actuales.values())
 
-            # --- PROMPT 1: ANÁLISIS CUANTITATIVO ---
-            prompt_cuant = f"""
-            Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
-            Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+            if not hay_datos_cuant:
+                st.warning("⚠️ No llenaste ningún indicador cuantitativo. Llena al menos uno antes de generar el análisis.")
+            else:
+                # --- PROMPT 1: ANÁLISIS CUANTITATIVO ---
+                prompt_cuant = f"""
+                Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
+                Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
 
-            DATOS FUNDAMENTALES DE {nombre_emp}:
-            {resumen}
+                DATOS FUNDAMENTALES DE {nombre_emp}:
+                {resumen}
 
-            TAREA:
-            1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
-            2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
-            3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
-            4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
-            5. IMPORTANTE: evalúa si los márgenes y demás indicadores son CONSISTENTES en el tiempo o
-               presentan alta volatilidad/tendencia negativa. Usa los datos por año que vienen entre paréntesis
-               junto a cada indicador (no solo el promedio) para juzgar esta consistencia.
+                TAREA:
+                1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
+                2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
+                3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
+                4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
+                5. IMPORTANTE: evalúa si los márgenes y demás indicadores son CONSISTENTES en el tiempo o
+                   presentan alta volatilidad/tendencia negativa. Usa los datos por año que vienen entre paréntesis
+                   junto a cada indicador (no solo el promedio) para juzgar esta consistencia.
 
-            Termina con una sección '📢 CONCLUSIÓN CUANTITATIVA' explicando el resultado.
-            Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
-            CALIFICACIÓN_CUANTITATIVA: X/10
-            (reemplaza X por tu calificación del 1 al 10 sobre la solidez cuantitativa de la empresa)
-            """
-
-            with st.spinner("Analizando indicadores cuantitativos..."):
-                try:
-                    texto_cuant = model.generate_content(prompt_cuant).text
-                except Exception as e:
-                    st.error(f"Error en el análisis cuantitativo: {e}")
-                    texto_cuant = None
-
-            texto_cual = None
-            if incluir_cualitativo and texto_cuant is not None:
-                # --- PROMPT 2: ANÁLISIS CUALITATIVO (4 pilares) ---
-                prompt_cual = f"""
-                Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
-                noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
-                reciente. Evalúa los siguientes 4 pilares con evidencia real (no supuestos):
-
-                1. MODELO DE NEGOCIO
-                - ¿Su propuesta de valor genera baja o alta tasa de abandono (churn) de clientes?
-                - ¿Su crecimiento es orgánico o depende de fuertes campañas de publicidad/marketing?
-                - ¿El cliente usa el producto o servicio de forma recurrente?
-                - ¿La empresa puede subir precios (inelástica) o es sensible al precio (elástica)?
-                - ¿Tiene bajo o alto costo de adquisición de clientes (CAC)?
-                - ¿Tiene altas devoluciones o quejas de clientes?
-                - ¿Tiene capacidad real de innovar?
-                - ¿Se ve obligada a hacer descuentos constantemente?
-                - ¿Sus productos se perciben distintos a los de la competencia?
-                - ¿Qué tan fácil es para la competencia copiar sus innovaciones?
-                - ¿Necesita invertir masivamente solo para mantener su posición actual?
-                - ¿Sus ingresos son recurrentes o dependen de compras grandes y únicas?
-                - ¿Gana más por cliente conforme crece?
-                - ¿Tiene productos o servicios diversificados?
-                - ¿Sus ingresos están distribuidos geográficamente o dependen de una sola región?
-                - ¿Algún cliente representa más del 5% de los ingresos totales? (excepto negocios B2B)
-
-                2. VENTAJA COMPETITIVA (MOAT)
-                - ¿Tiene un monopolio natural o el mercado es fácil de fragmentar?
-                - ¿El costo de adquisición de clientes se reduce con el tiempo?
-                - ¿Sus productos o servicios son fáciles de sustituir?
-                - ¿Qué tan fácil es para un cliente migrar a la competencia?
-                - ¿La marca tiene valor emocional/lealtad?
-                - ¿Sus patentes son fuertes o débiles?
-                - ¿Posee datos exclusivos o propietarios?
-                - ¿Tiene economías de escala reales?
-                - ¿Tiene acceso exclusivo a materias primas o insumos clave?
-                - ¿Tiene procesos propios únicos o son estándar de la industria?
-
-                3. EQUIPO DIRECTIVO Y CULTURA EMPRESARIAL
-                - ¿El equipo directivo tiene varios años de experiencia o hay alta rotación?
-                - ¿Las compensaciones son a largo plazo (acciones) o a corto plazo?
-                - ¿Los directivos tienen participación accionaria significativa?
-                - ¿La gerencia es transparente con inversionistas?
-                - ¿El CEO es prudente en la asignación de capital?
-                - ¿La junta directiva es independiente y justa, o son familiares/amigos?
-                - ¿La empresa tiene baja rotación de empleados?
-                - ¿La organización se enfoca en resolver problemas del cliente o en intereses propios?
-                - ¿Son éticos y reconocidos por ello?
-
-                4. OPORTUNIDADES Y RIESGOS DE LA INDUSTRIA
-                - ¿El mercado está creciendo o cayendo?
-                - ¿El mercado está fragmentado con oportunidad de crecimiento, o dominado por 2-3 grandes
-                  jugadores? (evalúa si la empresa analizada es uno de ellos)
-                - ¿La empresa se beneficia o se ve perjudicada por cambios demográficos futuros?
-                - ¿La empresa forma parte de un oligopolio?
-                - ¿Tiene poder real sobre los precios de su industria?
-                - ¿Tiene baja o alta amenaza de productos sustitutos?
-                - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
-                - ¿El país donde opera tiene un sistema legal fuerte o débil?
-
-                FORMATO DE RESPUESTA: Para cada uno de los 4 pilares, da un resumen breve con evidencia
-                encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil.
-
-                Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 4 pilares.
+                Termina con una sección '📢 CONCLUSIÓN CUANTITATIVA' explicando el resultado.
                 Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
-                CALIFICACIÓN_CUALITATIVA: X/10
-                (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio)
+                CALIFICACIÓN_CUANTITATIVA: X/10
+                (reemplaza X por tu calificación del 1 al 10 sobre la solidez cuantitativa de la empresa)
                 """
-                with st.spinner("Investigando y analizando el contexto cualitativo..."):
+
+                with st.spinner("Analizando indicadores cuantitativos..."):
                     try:
-                        texto_cual = model.generate_content(prompt_cual).text
+                        texto_cuant = model.generate_content(prompt_cuant).text
                     except Exception as e:
-                        if "429" in str(e) or "quota" in str(e).lower():
-                            st.warning("⚠️ Cuota de búsqueda excedida. Generando el análisis cualitativo sin Google Search.")
-                            try:
-                                prompt_cual_sin_busqueda = prompt_cual.replace("usando Google Search para investigar", "basándote en tu conocimiento general sobre")
-                                texto_cual = model.generate_content(prompt_cual_sin_busqueda).text
-                            except Exception as e2:
-                                st.error(f"Error en el análisis cualitativo: {e2}")
-                        else:
-                            st.error(f"Error en el análisis cualitativo: {e}")
+                        st.error(f"Error en el análisis cuantitativo: {e}")
+                        texto_cuant = None
 
-            # --- Mostrar resultados individuales ---
-            if texto_cuant is not None:
-                score_cuant = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
-                st.markdown("### 📐 Análisis Cuantitativo")
-                st.markdown(texto_cuant)
-                if score_cuant is not None:
-                    st.metric("Calificación Cuantitativa", f"{score_cuant:.1f}/10")
+                texto_cual = None
+                if incluir_cualitativo and texto_cuant is not None:
+                    # --- PROMPT 2: ANÁLISIS CUALITATIVO (4 pilares) ---
+                    prompt_cual = f"""
+                    Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
+                    noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
+                    reciente. Evalúa los siguientes 4 pilares con evidencia real (no supuestos):
 
-            score_cual = None
-            if texto_cual is not None:
-                score_cual = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
-                st.markdown("---")
-                st.markdown("### 🌐 Análisis Cualitativo")
-                st.markdown(texto_cual)
-                if score_cual is not None:
-                    st.metric("Calificación Cualitativa", f"{score_cual:.1f}/10")
+                    1. MODELO DE NEGOCIO
+                    - ¿Su propuesta de valor genera baja o alta tasa de abandono (churn) de clientes?
+                    - ¿Su crecimiento es orgánico o depende de fuertes campañas de publicidad/marketing?
+                    - ¿El cliente usa el producto o servicio de forma recurrente?
+                    - ¿La empresa puede subir precios (inelástica) o es sensible al precio (elástica)?
+                    - ¿Tiene bajo o alto costo de adquisición de clientes (CAC)?
+                    - ¿Tiene altas devoluciones o quejas de clientes?
+                    - ¿Tiene capacidad real de innovar?
+                    - ¿Se ve obligada a hacer descuentos constantemente?
+                    - ¿Sus productos se perciben distintos a los de la competencia?
+                    - ¿Qué tan fácil es para la competencia copiar sus innovaciones?
+                    - ¿Necesita invertir masivamente solo para mantener su posición actual?
+                    - ¿Sus ingresos son recurrentes o dependen de compras grandes y únicas?
+                    - ¿Gana más por cliente conforme crece?
+                    - ¿Tiene productos o servicios diversificados?
+                    - ¿Sus ingresos están distribuidos geográficamente o dependen de una sola región?
+                    - ¿Algún cliente representa más del 5% de los ingresos totales? (excepto negocios B2B)
 
-            # --- PROMPT 3: SÍNTESIS / CONCLUSIÓN GENERAL ---
-            if texto_cuant is not None and texto_cual is not None:
-                score_cuant_local = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
-                score_cual_local = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
-                promedio_general = (
-                    round((score_cuant_local + score_cual_local) / 2, 1)
-                    if (score_cuant_local is not None and score_cual_local is not None) else None
-                )
+                    2. VENTAJA COMPETITIVA (MOAT)
+                    - ¿Tiene un monopolio natural o el mercado es fácil de fragmentar?
+                    - ¿El costo de adquisición de clientes se reduce con el tiempo?
+                    - ¿Sus productos o servicios son fáciles de sustituir?
+                    - ¿Qué tan fácil es para un cliente migrar a la competencia?
+                    - ¿La marca tiene valor emocional/lealtad?
+                    - ¿Sus patentes son fuertes o débiles?
+                    - ¿Posee datos exclusivos o propietarios?
+                    - ¿Tiene economías de escala reales?
+                    - ¿Tiene acceso exclusivo a materias primas o insumos clave?
+                    - ¿Tiene procesos propios únicos o son estándar de la industria?
 
-                prompt_sintesis = f"""
-                Eres un analista financiero senior. Tienes dos análisis independientes de {nombre_emp}:
+                    3. EQUIPO DIRECTIVO Y CULTURA EMPRESARIAL
+                    - ¿El equipo directivo tiene varios años de experiencia o hay alta rotación?
+                    - ¿Las compensaciones son a largo plazo (acciones) o a corto plazo?
+                    - ¿Los directivos tienen participación accionaria significativa?
+                    - ¿La gerencia es transparente con inversionistas?
+                    - ¿El CEO es prudente en la asignación de capital?
+                    - ¿La junta directiva es independiente y justa, o son familiares/amigos?
+                    - ¿La empresa tiene baja rotación de empleados?
+                    - ¿La organización se enfoca en resolver problemas del cliente o en intereses propios?
+                    - ¿Son éticos y reconocidos por ello?
 
-                === ANÁLISIS CUANTITATIVO (calificación {score_cuant_local}/10) ===
-                {texto_cuant}
+                    4. OPORTUNIDADES Y RIESGOS DE LA INDUSTRIA
+                    - ¿El mercado está creciendo o cayendo?
+                    - ¿El mercado está fragmentado con oportunidad de crecimiento, o dominado por 2-3 grandes
+                      jugadores? (evalúa si la empresa analizada es uno de ellos)
+                    - ¿La empresa se beneficia o se ve perjudicada por cambios demográficos futuros?
+                    - ¿La empresa forma parte de un oligopolio?
+                    - ¿Tiene poder real sobre los precios de su industria?
+                    - ¿Tiene baja o alta amenaza de productos sustitutos?
+                    - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
+                    - ¿El país donde opera tiene un sistema legal fuerte o débil?
 
-                === ANÁLISIS CUALITATIVO (calificación {score_cual_local}/10) ===
-                {texto_cual}
+                    FORMATO DE RESPUESTA: Para cada uno de los 4 pilares, da un resumen breve con evidencia
+                    encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil.
 
-                TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa, combinando ambos análisis:
-                indica si {nombre_emp} es una buena opción de inversión a largo plazo, qué pesa más
-                (lo cuantitativo o lo cualitativo) y por qué. No repitas todo el detalle, sintetiza lo esencial.
+                    Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 4 pilares.
+                    Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+                    CALIFICACIÓN_CUALITATIVA: X/10
+                    (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio)
+                    """
+                    with st.spinner("Investigando y analizando el contexto cualitativo..."):
+                        try:
+                            texto_cual = model.generate_content(prompt_cual).text
+                        except Exception as e:
+                            if "429" in str(e) or "quota" in str(e).lower():
+                                st.warning("⚠️ Cuota de búsqueda excedida. Generando el análisis cualitativo sin Google Search.")
+                                try:
+                                    prompt_cual_sin_busqueda = prompt_cual.replace("usando Google Search para investigar", "basándote en tu conocimiento general sobre")
+                                    texto_cual = model.generate_content(prompt_cual_sin_busqueda).text
+                                except Exception as e2:
+                                    st.error(f"Error en el análisis cualitativo: {e2}")
+                            else:
+                                st.error(f"Error en el análisis cualitativo: {e}")
 
-                Después de tu conclusión, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
-                CALIFICACIÓN_PROMEDIO: {promedio_general if promedio_general is not None else "X"}/10
-                """
-                with st.spinner("Generando conclusión general..."):
-                    try:
-                        texto_sintesis = model.generate_content(prompt_sintesis).text
-                        st.markdown("---")
-                        st.markdown("### 🏁 Conclusión General")
-                        st.markdown(texto_sintesis)
-                        if promedio_general is not None:
-                            st.metric("Calificación Promedio General", f"{promedio_general:.1f}/10")
-                    except Exception as e:
-                        st.error(f"Error generando la conclusión general: {e}")
+                # --- Mostrar resultados individuales ---
+                if texto_cuant is not None:
+                    score_cuant = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
+                    st.markdown("### 📐 Análisis Cuantitativo")
+                    st.markdown(texto_cuant)
+                    if score_cuant is not None:
+                        st.metric("Calificación Cuantitativa", f"{score_cuant:.1f}/10")
+
+                score_cual = None
+                if texto_cual is not None:
+                    score_cual = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
+                    st.markdown("---")
+                    st.markdown("### 🌐 Análisis Cualitativo")
+                    st.markdown(texto_cual)
+                    if score_cual is not None:
+                        st.metric("Calificación Cualitativa", f"{score_cual:.1f}/10")
+
+                # --- PROMPT 3: SÍNTESIS / CONCLUSIÓN GENERAL ---
+                if texto_cuant is not None and texto_cual is not None:
+                    score_cuant_local = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
+                    score_cual_local = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
+                    promedio_general = (
+                        round((score_cuant_local + score_cual_local) / 2, 1)
+                        if (score_cuant_local is not None and score_cual_local is not None) else None
+                    )
+
+                    prompt_sintesis = f"""
+                    Eres un analista financiero senior. Tienes dos análisis independientes de {nombre_emp}:
+
+                    === ANÁLISIS CUANTITATIVO (calificación {score_cuant_local}/10) ===
+                    {texto_cuant}
+
+                    === ANÁLISIS CUALITATIVO (calificación {score_cual_local}/10) ===
+                    {texto_cual}
+
+                    TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa, combinando ambos análisis:
+                    indica si {nombre_emp} es una buena opción de inversión a largo plazo, qué pesa más
+                    (lo cuantitativo o lo cualitativo) y por qué. No repitas todo el detalle, sintetiza lo esencial.
+
+                    Después de tu conclusión, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+                    CALIFICACIÓN_PROMEDIO: {promedio_general if promedio_general is not None else "X"}/10
+                    """
+                    with st.spinner("Generando conclusión general..."):
+                        try:
+                            texto_sintesis = model.generate_content(prompt_sintesis).text
+                            st.markdown("---")
+                            st.markdown("### 🏁 Conclusión General")
+                            st.markdown(texto_sintesis)
+                            if promedio_general is not None:
+                                st.metric("Calificación Promedio General", f"{promedio_general:.1f}/10")
+                        except Exception as e:
+                            st.error(f"Error generando la conclusión general: {e}")
 
         else:
             # --- Modo: Comparar empresas guardadas (análisis cuantitativo comparativo) ---

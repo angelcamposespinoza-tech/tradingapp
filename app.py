@@ -250,7 +250,7 @@ def mostrar_trading():
             else:
                 st.sidebar.info("Aún no hay datos para auditar.")
     # --- HASTA AQUÍ ---
-    st.title("🚀 SUPERIOR SCANNERR")
+    st.title("🚀 SUPERIOR SCANNER")
 
     # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 
@@ -859,7 +859,11 @@ def _resumen_metricas_texto(nombre_empresa, datos):
     for info in datos.values():
         if info["promedio"] is None:
             continue
-        etiqueta_extra = " (dato único / promedio de 5 años)" if info["es_promedio_5y"] else f" (promedio de {len(info['valores'])} dato(s): {info['valores']})"
+        if info["es_promedio_5y"]:
+            etiqueta_extra = " (dato único / promedio de 5 años)"
+        else:
+            valores_txt = ", ".join(f"{v:.2f}" for v in info["valores"])
+            etiqueta_extra = f" (datos año por año, DE MÁS RECIENTE A MÁS ANTIGUO: [{valores_txt}])"
         lineas.append(f"- {info['label']}: {info['promedio']:.2f}{etiqueta_extra}")
     return "\n".join(lineas)
 

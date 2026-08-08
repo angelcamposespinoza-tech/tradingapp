@@ -838,6 +838,21 @@ def _parsear_valores(texto):
     return valores
 
 
+# Campos donde Morningstar pega el dato con el signo % pegado (ej. "71.07%\t74.99%")
+CAMPOS_CON_SIMBOLO_PORCENTAJE = {
+    "gross_margin", "operative_margin", "net_margin",
+    "roa", "roe", "roic", "fcf_sales",
+}
+
+
+def _parsear_valores_porcentaje(texto):
+    """Convierte '71.07%\t71.07%\t74.99%' en [71.07, 71.07, 74.99].
+    Usa el símbolo % (o cualquier espacio/tab) como separador, ignorando el signo."""
+    texto = texto.replace(",", ".")
+    tokens = re.findall(r'-?\d+(?:\.\d+)?', texto)
+    return [float(t) for t in tokens]
+
+
 def _resumen_metricas_texto(nombre_empresa, datos):
     """Arma un bloque de texto plano con las métricas de una empresa, para usarlo en el prompt de la IA."""
     lineas = [f"Empresa: {nombre_empresa}"]
@@ -884,7 +899,10 @@ def mostrar_largo_plazo():
         valores, promedio = [], None
         if valor_input.strip():
             try:
-                valores = _parsear_valores(valor_input)
+                if key in CAMPOS_CON_SIMBOLO_PORCENTAJE:
+                    valores = _parsear_valores_porcentaje(valor_input)
+                else:
+                    valores = _parsear_valores(valor_input)
                 if es_promedio_5y and len(valores) > 1:
                     st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
                 promedio = sum(valores) / len(valores)

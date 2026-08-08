@@ -907,7 +907,7 @@ def mostrar_largo_plazo():
                     st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
                 promedio = sum(valores) / len(valores)
             except ValueError:
-                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio.")
+                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio. (Texto recibido: '{valor_input}')")
 
         datos_actuales[key] = {
             "label": label,

@@ -815,6 +815,8 @@ METRICAS_LP = [
     ("roe", "ROE (%)"),
     ("roic", "ROIC (%)"),
     ("eps", "EPS ($)"),
+    ("ebit", "EBIT ($)"),
+    ("ebitda", "EBITDA ($)"),
     ("fcf_sales", "Free Cash Flow / Sales (%)"),
     ("fcf_net_income", "Free Cash Flow / Net Income (%)"),
     ("fcf_share", "Free Cash Flow / Share ($)"),

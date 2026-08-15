@@ -1116,66 +1116,95 @@ def mostrar_largo_plazo():
                     noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
                     reciente. Evalúa los siguientes 4 pilares con evidencia real (no supuestos):
 
-                    1. MODELO DE NEGOCIO
-                    - ¿Su propuesta de valor genera baja o alta tasa de abandono (churn) de clientes?
-                    - ¿Su crecimiento es orgánico o depende de fuertes campañas de publicidad/marketing?
-                    - ¿El cliente usa el producto o servicio de forma recurrente?
-                    - ¿La empresa puede subir precios (inelástica) o es sensible al precio (elástica)?
-                    - ¿Tiene bajo o alto costo de adquisición de clientes (CAC)?
-                    - ¿Tiene altas devoluciones o quejas de clientes?
-                    - ¿Tiene capacidad real de innovar?
-                    - ¿Se ve obligada a hacer descuentos constantemente?
-                    - ¿Sus productos se perciben distintos a los de la competencia?
-                    - ¿Qué tan fácil es para la competencia copiar sus innovaciones?
-                    - ¿Necesita invertir masivamente solo para mantener su posición actual?
-                    - ¿Sus ingresos son recurrentes o dependen de compras grandes y únicas?
-                    - ¿Gana más por cliente conforme crece?
-                    - ¿Tiene productos o servicios diversificados?
-                    - ¿Sus ingresos están distribuidos geográficamente o dependen de una sola región?
-                    - ¿Algún cliente representa más del 5% de los ingresos totales? (excepto negocios B2B)
+                    prompt_cual = f"""
+                Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
+                noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
+                reciente. Evalúa los siguientes 5 pilares con evidencia real (no supuestos):
 
-                    2. VENTAJA COMPETITIVA (MOAT)
-                    - ¿Tiene un monopolio natural o el mercado es fácil de fragmentar?
-                    - ¿El costo de adquisición de clientes se reduce con el tiempo?
-                    - ¿Sus productos o servicios son fáciles de sustituir?
-                    - ¿Qué tan fácil es para un cliente migrar a la competencia?
-                    - ¿La marca tiene valor emocional/lealtad?
-                    - ¿Sus patentes son fuertes o débiles?
-                    - ¿Posee datos exclusivos o propietarios?
-                    - ¿Tiene economías de escala reales?
-                    - ¿Tiene acceso exclusivo a materias primas o insumos clave?
-                    - ¿Tiene procesos propios únicos o son estándar de la industria?
+                DATOS FINANCIEROS DISPONIBLES DE {nombre_emp} (para el pilar 5):
+                {resumen}
 
-                    3. EQUIPO DIRECTIVO Y CULTURA EMPRESARIAL
-                    - ¿El equipo directivo tiene varios años de experiencia o hay alta rotación?
-                    - ¿Las compensaciones son a largo plazo (acciones) o a corto plazo?
-                    - ¿Los directivos tienen participación accionaria significativa?
-                    - ¿La gerencia es transparente con inversionistas?
-                    - ¿El CEO es prudente en la asignación de capital?
-                    - ¿La junta directiva es independiente y justa, o son familiares/amigos?
-                    - ¿La empresa tiene baja rotación de empleados?
-                    - ¿La organización se enfoca en resolver problemas del cliente o en intereses propios?
-                    - ¿Son éticos y reconocidos por ello?
+                1. MODELO DE NEGOCIO
+                - ¿Su propuesta de valor genera baja o alta tasa de abandono (churn) de clientes?
+                - ¿Su crecimiento es orgánico o depende de fuertes campañas de publicidad/marketing?
+                - ¿El cliente usa el producto o servicio de forma recurrente?
+                - ¿La empresa puede subir precios (inelástica) o es sensible al precio (elástica)?
+                - ¿Tiene bajo o alto costo de adquisición de clientes (CAC)?
+                - ¿Tiene altas devoluciones o quejas de clientes?
+                - ¿Tiene capacidad real de innovar?
+                - ¿Se ve obligada a hacer descuentos constantemente?
+                - ¿Sus productos se perciben distintos a los de la competencia?
+                - ¿Qué tan fácil es para la competencia copiar sus innovaciones?
+                - ¿Necesita invertir masivamente solo para mantener su posición actual?
+                - ¿Sus ingresos son recurrentes o dependen de compras grandes y únicas?
+                - ¿Gana más por cliente conforme crece?
+                - ¿Tiene productos o servicios diversificados?
+                - ¿Sus ingresos están distribuidos geográficamente o dependen de una sola región?
+                - ¿Algún cliente representa más del 5% de los ingresos totales? (excepto negocios B2B)
 
-                    4. OPORTUNIDADES Y RIESGOS DE LA INDUSTRIA
-                    - ¿El mercado está creciendo o cayendo?
-                    - ¿El mercado está fragmentado con oportunidad de crecimiento, o dominado por 2-3 grandes
-                      jugadores? (evalúa si la empresa analizada es uno de ellos)
-                    - ¿La empresa se beneficia o se ve perjudicada por cambios demográficos futuros?
-                    - ¿La empresa forma parte de un oligopolio?
-                    - ¿Tiene poder real sobre los precios de su industria?
-                    - ¿Tiene baja o alta amenaza de productos sustitutos?
-                    - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
-                    - ¿El país donde opera tiene un sistema legal fuerte o débil?
+                2. VENTAJA COMPETITIVA (MOAT)
+                - ¿Tiene un monopolio natural o el mercado es fácil de fragmentar?
+                - ¿El costo de adquisición de clientes se reduce con el tiempo?
+                - ¿Sus productos o servicios son fáciles de sustituir?
+                - ¿Qué tan fácil es para un cliente migrar a la competencia?
+                - ¿La marca tiene valor emocional/lealtad?
+                - ¿Sus patentes son fuertes o débiles?
+                - ¿Posee datos exclusivos o propietarios?
+                - ¿Tiene economías de escala reales?
+                - ¿Tiene acceso exclusivo a materias primas o insumos clave?
+                - ¿Tiene procesos propios únicos o son estándar de la industria?
 
-                    FORMATO DE RESPUESTA: Para cada uno de los 4 pilares, da un resumen breve con evidencia
-                    encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil.
+                3. EQUIPO DIRECTIVO Y CULTURA EMPRESARIAL
+                - ¿El equipo directivo tiene varios años de experiencia o hay alta rotación?
+                - ¿Las compensaciones son a largo plazo (acciones) o a corto plazo?
+                - ¿Los directivos tienen participación accionaria significativa?
+                - ¿La gerencia es transparente con inversionistas?
+                - ¿El CEO es prudente en la asignación de capital?
+                - ¿La junta directiva es independiente y justa, o son familiares/amigos?
+                - ¿La empresa tiene baja rotación de empleados?
+                - ¿La organización se enfoca en resolver problemas del cliente o en intereses propios?
+                - ¿Son éticos y reconocidos por ello?
 
-                    Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 4 pilares.
-                    Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
-                    CALIFICACIÓN_CUALITATIVA: X/10
-                    (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio)
-                    """
+                4. OPORTUNIDADES Y RIESGOS DE LA INDUSTRIA
+                - ¿El mercado está creciendo o cayendo?
+                - ¿El mercado está fragmentado con oportunidad de crecimiento, o dominado por 2-3 grandes
+                  jugadores? (evalúa si la empresa analizada es uno de ellos)
+                - ¿La empresa se beneficia o se ve perjudicada por cambios demográficos futuros?
+                - ¿La empresa forma parte de un oligopolio?
+                - ¿Tiene poder real sobre los precios de su industria?
+                - ¿Tiene baja o alta amenaza de productos sustitutos?
+                - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
+                - ¿El país donde opera tiene un sistema legal fuerte o débil?
+
+                5. SEÑALES DE ALERTA (cruza los datos financieros de arriba con lo que encuentres investigando)
+                - ROE muy alto + Debt to Equity alto (>2-3): ¿el ROE puede estar inflado por deuda?
+                - PE Cash Flow Ratio alto (>20) + Free Cash Flow/Net Income bajo (<1) o cayendo: ¿ganancias
+                  contables sin respaldo de efectivo real?
+                - Gross Margin alto (>40%) pero Operating Margin bajo (<5%): ¿los costos operativos se están
+                  comiendo la rentabilidad?
+                - Current Ratio > 1 pero Quick Ratio < 1: ¿liquidez atrapada en inventarios?
+                - PS Ratio alto (>10) con EPS negativo: ¿se está pagando por expectativas, no por resultados?
+                - Price to Book < 1 sin razón clara + ROA bajo + Debt to Equity alto: ¿el mercado desconfía del
+                  valor contable reportado?
+                - ROIC consistentemente bajo (<8%): ¿posible destrucción de valor?
+                - EPS creciendo mientras Free Cash Flow/Share o Free Cash Flow/Net Income cae: ¿posible
+                  contabilidad agresiva?
+                - Además, busca en las noticias/investigación si hay señales cualitativas de alerta: cambios de
+                  auditor, restatements de resultados, ventas masivas de acciones por directivos (insider
+                  selling), reportes de vendedores en corto (short seller reports), investigaciones regulatorias,
+                  recortes de dividendo o de guía financiera (guidance cuts).
+                Evalúa SOLO lo que puedas verificar con los datos e información disponible, no inventes cifras.
+
+                FORMATO DE RESPUESTA: Para cada uno de los 5 pilares, da un resumen breve con evidencia
+                encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil. Para el pilar 5,
+                si detectas alguna señal, indícalo claramente; si no detectas ninguna, dilo también.
+
+                Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 5 pilares.
+                Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
+                CALIFICACIÓN_CUALITATIVA: X/10
+                (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio, considerando
+                también las señales de alerta detectadas)
+                """
                     with st.spinner("Investigando y analizando el contexto cualitativo..."):
                         try:
                             texto_cual = model.generate_content(prompt_cual).text

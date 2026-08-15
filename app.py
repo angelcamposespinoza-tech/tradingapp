@@ -904,11 +904,33 @@ def mostrar_largo_plazo():
         with col_op2:
             num_oportunidades = st.slider("Cuántas oportunidades quieres", min_value=3, max_value=10, value=5, key="lp_num_oportunidades")
 
+        SECTORES_DISPONIBLES = [
+            "Financiero", "Tecnología", "Servicios", "B2B", "Manufactura",
+            "Salud y Farmacéutica", "Retail", "Logística", "Turismo",
+            "Energía", "Bienes Raíces", "Consumo Básico", "Consumo Discrecional",
+            "Materias Primas", "Telecomunicaciones", "Educación",
+            "Agroindustria", "Entretenimiento y Medios",
+        ]
+        sectores_seleccionados = st.multiselect(
+            "O selecciona uno o varios sectores",
+            options=SECTORES_DISPONIBLES,
+            key="lp_sectores_seleccionados",
+        )
+
         if st.button("🚀 Buscar Oportunidades"):
             if not model:
                 st.error("IA no configurada.")
             else:
-                filtro_txt = f" enfocándote específicamente en: {tema_oportunidades}." if tema_oportunidades.strip() else " sin restricción de sector, país o tamaño de empresa."
+                partes_filtro = []
+                if sectores_seleccionados:
+                    partes_filtro.append("sectores: " + ", ".join(sectores_seleccionados))
+                if tema_oportunidades.strip():
+                    partes_filtro.append(tema_oportunidades.strip())
+
+                if partes_filtro:
+                    filtro_txt = " enfocándote específicamente en: " + "; ".join(partes_filtro) + "."
+                else:
+                    filtro_txt = " sin restricción de sector, país o tamaño de empresa."
 
                 prompt_oportunidades = f"""
                 Actúa como un analista de inversión fundamental especializado en identificar oportunidades

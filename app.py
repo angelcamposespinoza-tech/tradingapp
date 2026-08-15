@@ -884,12 +884,71 @@ def mostrar_largo_plazo():
     st.caption("Captura los indicadores fundamentales de una empresa, guárdalos, compara contra otras y pide un análisis con IA (incluyendo contexto cualitativo de noticias).")
 
     # --- Estado de sesión ---
+    # --- Estado de sesión ---
     if "lp_empresas_guardadas" not in st.session_state:
         st.session_state["lp_empresas_guardadas"] = {}
 
+    # ============================================================
+    # DESCUBRIR OPORTUNIDADES DE INVERSIÓN (búsqueda cualitativa)
+    # ============================================================
+    with st.expander("🔎 Descubrir Oportunidades de Inversión", expanded=False):
+        st.caption("Busca empresas interesantes en cualquier país o sector, con base principalmente en investigación cualitativa de mercado (tendencias, catalizadores, posicionamiento competitivo).")
+
+        col_op1, col_op2 = st.columns(2)
+        with col_op1:
+            tema_oportunidades = st.text_input(
+                "Sector, tema o región de interés (opcional)",
+                key="lp_tema_oportunidades",
+                placeholder="Ej: inteligencia artificial, energía limpia, Latinoamérica, small caps...",
+            )
+        with col_op2:
+            num_oportunidades = st.slider("Cuántas oportunidades quieres", min_value=3, max_value=10, value=5, key="lp_num_oportunidades")
+
+        if st.button("🚀 Buscar Oportunidades"):
+            if not model:
+                st.error("IA no configurada.")
+            else:
+                filtro_txt = f" enfocándote específicamente en: {tema_oportunidades}." if tema_oportunidades.strip() else " sin restricción de sector, país o tamaño de empresa."
+
+                prompt_oportunidades = f"""
+                Actúa como un analista de inversión fundamental especializado en identificar oportunidades
+                de inversión a largo plazo. Usa Google Search para investigar tendencias de mercado actuales,
+                noticias recientes y contexto cualitativo real (no inventes datos).
+
+                TAREA: Identifica {num_oportunidades} empresas que hoy en día se vean como oportunidades
+                interesantes de inversión a largo plazo, pueden ser de cualquier país del mundo,{filtro_txt}
+
+                Básate PRINCIPALMENTE en un análisis cualitativo de mercado, considerando cosas como:
+                - Tendencias estructurales o de consumo que las favorecen
+                - Cambios en la industria, disrupción o innovación relevante
+                - Posicionamiento competitivo y ventajas frente a rivales
+                - Catalizadores recientes (noticias, lanzamientos, expansión, regulación favorable)
+                - Riesgos relevantes a tener en cuenta
+
+                Para cada empresa da:
+                1. Nombre y ticker (si cotiza en bolsa)
+                2. País / región y sector
+                3. Un resumen de 3-5 líneas explicando POR QUÉ se ve interesante ahora mismo (el contexto
+                   cualitativo, no números financieros a detalle)
+                4. Un riesgo o duda relevante a vigilar
+
+                Aclara al inicio que esto es un punto de partida para investigar más a fondo, no una
+                recomendación de compra. Responde en español, en formato de lista clara por empresa.
+                """
+                with st.spinner("Buscando oportunidades de inversión..."):
+                    try:
+                        resultado_oportunidades = model.generate_content(prompt_oportunidades).text
+                        st.markdown(resultado_oportunidades)
+                    except Exception as e:
+                        if "429" in str(e) or "quota" in str(e).lower():
+                            st.warning("⚠️ Cuota de búsqueda excedida. Intenta de nuevo en unos minutos.")
+                        else:
+                            st.error(f"Error buscando oportunidades: {e}")
+
+        st.caption("💡 Cuando encuentres una que te interese, escribe su ticker abajo en 'Ticker o Nombre de la Empresa' y llena sus indicadores para el análisis completo.")
+
     st.markdown("---")
     ticker_lp = st.text_input("🏷️ Ticker o Nombre de la Empresa", key="lp_ticker_actual", placeholder="Ej: AAPL")
-
     st.info("✏️ Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
 
     datos_actuales = {}

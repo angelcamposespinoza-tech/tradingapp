@@ -1110,12 +1110,7 @@ def mostrar_largo_plazo():
 
                 texto_cual = None
                 if incluir_cualitativo and texto_cuant is not None:
-                    # --- PROMPT 2: ANÁLISIS CUALITATIVO (4 pilares) ---
-                    prompt_cual = f"""
-                    Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
-                    noticias, reportes financieros, entrevistas, foros de inversión y su información pública más
-                    reciente. Evalúa los siguientes 4 pilares con evidencia real (no supuestos):
-
+                    # --- PROMPT 2: ANÁLISIS CUALITATIVO (5 pilares) ---
                     prompt_cual = f"""
                 Realiza un análisis cualitativo profundo de {nombre_emp} usando Google Search para investigar
                 noticias, reportes financieros, entrevistas, foros de inversión y su información pública más

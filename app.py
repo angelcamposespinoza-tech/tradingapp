@@ -815,8 +815,8 @@ METRICAS_LP = [
     ("roe", "ROE (%)"),
     ("roic", "ROIC (%)"),
     ("eps", "EPS ($)"),
-    ("ebit", "EBIT ($)"),
-    ("ebitda", "EBITDA ($)"),
+    ("ebit", "EBIT Margin (%)"),
+    ("ebitda", "EBITDA Margin (%)"),
     ("fcf_sales", "Free Cash Flow / Sales (%)"),
     ("fcf_net_income", "Free Cash Flow / Net Income (%)"),
     ("fcf_share", "Free Cash Flow / Share ($)"),
@@ -843,15 +843,17 @@ def _parsear_valores(texto):
 # Campos donde Morningstar pega el dato con el signo % pegado (ej. "71.07%\t74.99%")
 CAMPOS_CON_SIMBOLO_PORCENTAJE = {
     "gross_margin", "operative_margin", "net_margin",
-    "roa", "roe", "roic", "fcf_sales",
+    "roa", "roe", "roic", "fcf_sales", "ebit", "ebitda",
 }
 
 
 def _parsear_valores_porcentaje(texto):
     """Convierte '71.07%\t71.07%\t74.99%' en [71.07, 71.07, 74.99].
     Usa el símbolo % (o cualquier espacio/tab) como separador, ignorando el signo."""
-    texto = texto.replace(",", ".")
+    texto = texto.replace("−", "-").replace(",", ".")
     tokens = re.findall(r'-?\d+(?:\.\d+)?', texto)
+    if not tokens:
+        raise ValueError("sin números")
     return [float(t) for t in tokens]
 
 
@@ -1019,7 +1021,13 @@ def _fila_indicador(key, nombre, valor, texto_valor, estado, frase):
 
 def evaluar_tribunales(datos, es_financiera=False):
     """Aplica los 3 tribunales con reglas fijas. Regresa None si no hay ningún dato."""
-    roic = _dato(datos, "roic")
+    info_roic = datos.get("roic") or {}
+    if info_roic.get("es_promedio_5y"):
+        roic = None  # si solo capturaste el promedio de 5 años, no hay dato "actual"
+    elif info_roic.get("valores"):
+        roic = info_roic["valores"][0]  # el dato más reciente (primero de la fila)
+    else:
+        roic = None
     roic5 = _dato(datos, "roic_5y")
     roe = _dato(datos, "roe")
     gm = _dato(datos, "gross_margin")
@@ -1378,6 +1386,27 @@ def mostrar_veredicto_motor(res, aprendizaje=False):
     st.caption("HERRAMIENTA EDUCATIVA: NINGUNA CATEGORÍA ES UNA ORDEN DE COMPRA O VENTA. LOS NÚMEROS SON LA MITAD DE LA TAREA; LA OTRA MITAD ES EL ANÁLISIS CUALITATIVO.")
 
 
+def _resumen_veredicto_texto(res):
+    """Texto compacto del veredicto del motor para incluirlo en los prompts de la IA."""
+    if res is None:
+        return "VEREDICTO DEL MOTOR DE REGLAS FIJAS: sin datos suficientes para calcularlo."
+    lineas = [
+        "VEREDICTO DEL MOTOR DE REGLAS FIJAS (calculado sin IA con el método de 3 tribunales: calidad -> salud -> precio):",
+        f"- Categoría: {res['categoria']} | Puntaje: {res['puntaje']}/9",
+        f"- Alertas: {', '.join(res['alertas']) if res['alertas'] else 'ninguna'}",
+    ]
+    for clave in ("CALIDAD", "SALUD", "PRECIO"):
+        trib = res["tribunales"][clave]
+        lineas.append(f"- Tribunal de {clave.lower()}: {trib['veredicto']} ({trib['detalle']})")
+        for fila in trib["filas"]:
+            estado = ESTADOS_INFO[fila["estado"]][0]
+            lineas.append(f"    * {fila['nombre']}: {fila['valor']} [{estado}] {fila['frase']}")
+    lineas.append("Significado de categorías: DEEP DIVE = buen negocio, sano y a buen precio (investigar a fondo, no es "
+                  "orden de compra); WATCHLIST = buen negocio y sano pero hoy no barato; NEUTRAL = ni excelente ni mala; "
+                  "DESCARTADA = no pasa los filtros hoy (no es pronóstico); OMITIDA = banco/aseguradora/utility.")
+    return "\n".join(lineas)
+
+
 def _limpiar_formulario_lp():
     """Se ejecuta ANTES de dibujar la página (on_click), por eso sí puede vaciar los campos sin error."""
     for key, _ in METRICAS_LP:
@@ -1494,10 +1523,8 @@ def mostrar_largo_plazo():
         valores, promedio = [], None
         if valor_input.strip():
             try:
-                if key in CAMPOS_CON_SIMBOLO_PORCENTAJE:
-                    valores = _parsear_valores_porcentaje(valor_input)
-                else:
-                    valores = _parsear_valores(valor_input)
+                # Acepta números con o sin % pegado, separados por espacio o tabulador
+                valores = _parsear_valores_porcentaje(valor_input)
                 if es_promedio_5y and len(valores) > 1:
                     st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
                 promedio = sum(valores) / len(valores)
@@ -1547,6 +1574,22 @@ def mostrar_largo_plazo():
             datos_actuales["precio_actual"]["promedio"] = precio_auto
             st.caption(f"PRECIO ACTUAL TOMADO DE YFINANCE: {precio_auto:,.2f} USD")
 
+    # Si no se capturó el ROIC de 5 años, se calcula con tu fila de ROIC (los 5 datos más recientes)
+    info_roic_form = datos_actuales.get("roic", {})
+    if datos_actuales["roic_5y"]["promedio"] is None and info_roic_form.get("valores"):
+        roic5_auto, origen_roic5 = None, ""
+        if info_roic_form.get("es_promedio_5y"):
+            roic5_auto = info_roic_form["promedio"]
+            origen_roic5 = "TU DATO DE ROIC MARCADO COMO 5Y"
+        elif len(info_roic_form["valores"]) >= 2:
+            ultimos_roic = info_roic_form["valores"][:5]
+            roic5_auto = sum(ultimos_roic) / len(ultimos_roic)
+            origen_roic5 = f"LOS {len(ultimos_roic)} AÑOS MÁS RECIENTES DE TU FILA DE ROIC"
+        if roic5_auto is not None:
+            datos_actuales["roic_5y"]["valores"] = [roic5_auto]
+            datos_actuales["roic_5y"]["promedio"] = roic5_auto
+            st.caption(f"ROIC PROMEDIO 5 AÑOS CALCULADO CON {origen_roic5}: {roic5_auto:.1f}%")
+
     st.markdown("---")
     col_g1, col_g2, col_g3 = st.columns(3)
     with col_g1:
@@ -1561,6 +1604,7 @@ def mostrar_largo_plazo():
             st.error("Escribe un ticker o nombre para identificar la empresa antes de guardar.")
         else:
             st.session_state["lp_empresas_guardadas"][ticker_lp.strip().upper()] = datos_actuales
+            st.session_state.setdefault("lp_financieras", {})[ticker_lp.strip().upper()] = es_financiera
             st.success(f"✅ Datos de {ticker_lp.strip().upper()} guardados. Puedes limpiar el formulario y capturar otra empresa para comparar.")
 
 
@@ -1592,7 +1636,10 @@ def mostrar_largo_plazo():
                 info["label"]: (round(info["promedio"], 2) if info["promedio"] is not None else "-")
                 for info in datos.values()
             }
-        df_comparacion = pd.DataFrame(tabla)
+        for emp, datos in empresas_guardadas.items():
+            res_emp = evaluar_tribunales(datos, st.session_state.get("lp_financieras", {}).get(emp, False))
+            tabla[emp] = {"CATEGORÍA DEL MOTOR": res_emp["categoria"] if res_emp else "SIN DATOS", **tabla[emp]}
+        df_comparacion = pd.DataFrame(tabla).astype(str)
         st.dataframe(df_comparacion, use_container_width=True)
 
     # --- VEREDICTO DEL MOTOR DE TRIBUNALES (NUEVO, SIN IA) ---
@@ -1612,6 +1659,7 @@ def mostrar_largo_plazo():
         st.caption("LLENA LOS INDICADORES PARA VER EL VEREDICTO.")
     else:
         mostrar_veredicto_motor(resultado_motor, modo_aprendizaje)
+    veredicto_txt = _resumen_veredicto_texto(resultado_motor)
 
     # --- Análisis con IA ---
     st.markdown("---")
@@ -1644,14 +1692,20 @@ def mostrar_largo_plazo():
                 DATOS FUNDAMENTALES DE {nombre_emp}:
                 {resumen}
 
+                {veredicto_txt}
+
                 TAREA:
-                1. Evalúa la rentabilidad (márgenes, ROA, ROE, ROIC).
+                1. Evalúa la rentabilidad (márgenes bruto, operativo, neto, EBIT y EBITDA; ROA, ROE, ROIC).
                 2. Evalúa la salud financiera (liquidez: Quick/Current Ratio; apalancamiento: Debt to Equity).
                 3. Evalúa la valuación (PE, PS, PEG, Price to Book, PE Cash Flow).
                 4. Evalúa la generación y calidad del flujo de caja libre (Free Cash Flow).
                 5. IMPORTANTE: evalúa si los márgenes y demás indicadores son CONSISTENTES en el tiempo o
                    presentan alta volatilidad/tendencia negativa. Usa los datos por año que vienen entre paréntesis
                    junto a cada indicador (no solo el promedio) para juzgar esta consistencia.
+                6. Explica en lenguaje muy sencillo el VEREDICTO DEL MOTOR: qué significa su categoría, qué dicen
+                   Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield y el upside contra el Fair Value, y qué
+                   significan sus alertas (si las hay). Si tu conclusión difiere del motor, explica claramente por qué;
+                   no lo contradigas sin dar razones basadas en los datos.
 
                 Termina con una sección '📢 CONCLUSIÓN CUANTITATIVA' explicando el resultado.
                 Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
@@ -1729,7 +1783,11 @@ def mostrar_largo_plazo():
                 - ¿La regulación de su industria es amigable o agresiva hacia la empresa?
                 - ¿El país donde opera tiene un sistema legal fuerte o débil?
 
+                {veredicto_txt}
+
                 5. SEÑALES DE ALERTA (cruza los datos financieros de arriba con lo que encuentres investigando)
+                - Si el VEREDICTO DEL MOTOR trae alertas (M-Score, Altman en zona de riesgo, posible trampa de valor,
+                  mejora débil, ¿demasiado barata?), investiga si las noticias o reportes las confirman o las explican.
                 - ROE muy alto + Debt to Equity alto (>2-3): ¿el ROE puede estar inflado por deuda?
                 - PE Cash Flow Ratio alto (>20) + Free Cash Flow/Net Income bajo (<1) o cayendo: ¿ganancias
                   contables sin respaldo de efectivo real?
@@ -1807,9 +1865,13 @@ def mostrar_largo_plazo():
                     === ANÁLISIS CUALITATIVO (calificación {score_cual_local}/10) ===
                     {texto_cual}
 
+                    {veredicto_txt}
+
                     TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa, combinando ambos análisis:
                     indica si {nombre_emp} es una buena opción de inversión a largo plazo, qué pesa más
                     (lo cuantitativo o lo cualitativo) y por qué. No repitas todo el detalle, sintetiza lo esencial.
+                    Menciona en una frase la categoría del motor y si el análisis cualitativo la confirma o la pone en duda.
+                    Recuerda que ninguna categoría es una orden de compra: DEEP DIVE significa investigar a fondo.
 
                     Después de tu conclusión, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
                     CALIFICACIÓN_PROMEDIO: {promedio_general if promedio_general is not None else "X"}/10
@@ -1827,7 +1889,11 @@ def mostrar_largo_plazo():
 
         else:
             # --- Modo: Comparar empresas guardadas (análisis cuantitativo comparativo) ---
-            bloques = [_resumen_metricas_texto(emp, datos) for emp, datos in empresas_guardadas.items()]
+            bloques = [
+                _resumen_metricas_texto(emp, datos) + "\n" + _resumen_veredicto_texto(
+                    evaluar_tribunales(datos, st.session_state.get("lp_financieras", {}).get(emp, False)))
+                for emp, datos in empresas_guardadas.items()
+            ]
             resumen_total = "\n\n".join(bloques)
             instruccion_busqueda = (
                 "Usa Google Search para investigar noticias recientes (últimos 3-6 meses), posición competitiva, "
@@ -1848,6 +1914,9 @@ def mostrar_largo_plazo():
             TAREA: Compara rentabilidad, salud financiera, valuación y generación de caja entre todas las empresas.
             Evalúa también si los márgenes de cada una son consistentes en el tiempo o volátiles, usando los
             datos por año que vienen entre paréntesis junto a cada indicador.
+            Cada empresa trae su VEREDICTO DEL MOTOR (categoría, tribunales y alertas): úsalo en la comparación y
+            explica en lenguaje sencillo qué significan sus indicadores (Piotroski, Altman Z, Beneish M, EV/EBIT,
+            FCF Yield, upside). Si tu veredicto final difiere del motor, explica por qué.
 
             Termina SIEMPRE con una sección '🏆 VEREDICTO' indicando cuál es la mejor opción de inversión a largo plazo
             entre las analizadas, y por qué, en lenguaje sencillo.
@@ -1881,6 +1950,8 @@ def mostrar_largo_plazo():
 
             DATOS DE LA EMPRESA EN EL FORMULARIO ({nombre_emp}):
             {_resumen_metricas_texto(nombre_emp, datos_actuales)}
+
+            {veredicto_txt}
 
             EMPRESAS GUARDADAS PARA COMPARAR: {", ".join(empresas_guardadas.keys()) if empresas_guardadas else "Ninguna guardada aún"}
 

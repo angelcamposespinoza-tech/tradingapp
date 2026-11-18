@@ -983,6 +983,7 @@ ALERTAS_INFO = {
     "ALTMAN ZONA DE RIESGO": "ALTMAN Z MENOR A 1.81: ZONA DE PELIGRO FINANCIERO.",
     "EXCELENTE PERO SALUD DÉBIL": "PASÓ LA PRUEBA DE CALIDAD PERO REPROBÓ LA DE SALUD: EL CINTURÓN DE SEGURIDAD LA FRENÓ.",
     "DATOS INSUFICIENTES": "FALTAN 5 O MÁS INDICADORES CLAVE: SE DESCARTA POR FALTA DE INFORMACIÓN, NO POR SER MALA.",
+    "TENDENCIA NEGATIVA": "LA MAYORÍA DE LOS INDICADORES CON HISTORIAL VAN EMPEORANDO (3 O MÁS EN ROJO Y MÁS ROJOS QUE VERDES). AUNQUE HOY PASE LOS FILTROS, EL NEGOCIO PODRÍA ESTAR DETERIORÁNDOSE: REVISA EL PANEL DE TENDENCIAS.",
 }
 
 ESTADOS_INFO = {
@@ -1022,6 +1023,14 @@ def _fila_indicador(key, nombre, valor, texto_valor, estado, frase):
         return {"key": key, "nombre": nombre, "valor": "N/D", "estado": "nd",
                 "frase": "NO CAPTURADO: NO SE PUEDE EVALUAR"}
     return {"key": key, "nombre": nombre, "valor": texto_valor, "estado": estado, "frase": frase}
+
+
+def _conteo_tendencias(datos):
+    """Cuántos indicadores con historial van mejorando y cuántos empeorando."""
+    tendencias = [info.get("tendencia") for info in datos.values() if info.get("tendencia")]
+    n_mejor = sum(1 for t in tendencias if t["calidad"] == "favorable")
+    n_peor = sum(1 for t in tendencias if t["calidad"] == "desfavorable")
+    return n_mejor, n_peor
 
 
 def evaluar_tribunales(datos, es_financiera=False):
@@ -1165,6 +1174,9 @@ def evaluar_tribunales(datos, es_financiera=False):
             alertas.append("EXCELENTE PERO SALUD DÉBIL")
         if insuf:
             alertas.append("DATOS INSUFICIENTES")
+        n_mejor, n_peor = _conteo_tendencias(datos)
+        if n_peor >= 3 and n_peor > n_mejor:
+            alertas.append("TENDENCIA NEGATIVA")
 
     # --- TARJETAS POR INDICADOR (dato + estado + frase sencilla) ---
     def _rango(v, alto, bajo):
@@ -1290,6 +1302,8 @@ def evaluar_tribunales(datos, es_financiera=False):
     return {
         "categoria": categoria,
         "puntaje": n_cal + n_val + n_sal,
+        "n_mejor": _conteo_tendencias(datos)[0],
+        "n_peor": _conteo_tendencias(datos)[1],
         "alertas": alertas,
         "tribunales": {
             "CALIDAD": {"veredicto": cal, "detalle": f"{n_cal}/3 PRUEBAS", "filas": f_calidad},
@@ -1399,6 +1413,7 @@ def _resumen_veredicto_texto(res):
         "VEREDICTO DEL MOTOR DE REGLAS FIJAS (calculado sin IA con el método de 3 tribunales: calidad -> salud -> precio):",
         f"- Categoría: {res['categoria']} | Puntaje: {res['puntaje']}/9",
         f"- Alertas: {', '.join(res['alertas']) if res['alertas'] else 'ninguna'}",
+        f"- Tendencia de los indicadores con historial: {res.get('n_mejor', 0)} mejorando, {res.get('n_peor', 0)} empeorando",
     ]
     for clave in ("CALIDAD", "SALUD", "PRECIO"):
         trib = res["tribunales"][clave]
@@ -1811,6 +1826,7 @@ def mostrar_largo_plazo():
                 "SALUD FINANCIERA": res["tribunales"]["SALUD"]["veredicto"] if res else "-",
                 "PRECIO": res["tribunales"]["PRECIO"]["veredicto"] if res else "-",
                 "ALERTAS": ", ".join(res["alertas"]) if (res and res["alertas"]) else "NINGUNA",
+                "TENDENCIA": (f"{res['n_mejor']} MEJORANDO / {res['n_peor']} EMPEORANDO" if res else "-"),
             }
             for info in e["datos"].values():
                 fila[info["label"]] = round(info["promedio"], 2) if info["promedio"] is not None else "-"
@@ -1987,7 +2003,7 @@ def mostrar_largo_plazo():
 
                 5. SEÑALES DE ALERTA (cruza los datos financieros de arriba con lo que encuentres investigando)
                 - Si el VEREDICTO DEL MOTOR trae alertas (M-Score, Altman en zona de riesgo, posible trampa de valor,
-                  mejora débil, ¿demasiado barata?), investiga si las noticias o reportes las confirman o las explican.
+                  mejora débil, ¿demasiado barata?, tendencia negativa), investiga si las noticias o reportes las confirman o las explican.
                 - ROE muy alto + Debt to Equity alto (>2-3): ¿el ROE puede estar inflado por deuda?
                 - PE Cash Flow Ratio alto (>20) + Free Cash Flow/Net Income bajo (<1) o cayendo: ¿ganancias
                   contables sin respaldo de efectivo real?
@@ -2130,16 +2146,21 @@ def mostrar_largo_plazo():
             TAREA:
             1. Compara rentabilidad, salud financiera, valuación, crecimiento y generación de caja entre todas las empresas.
                Evalúa si los márgenes de cada una son consistentes o volátiles, usando los datos por año entre paréntesis.
+               MUY IMPORTANTE: usa la "tendencia calculada" de cada indicador y el conteo de mejorando/empeorando de cada
+               empresa para decir claramente cuál está MEJORANDO y cuál está EMPEORANDO con el tiempo. Una empresa con buenos
+               números hoy pero tendencia negativa debe pesar menos que una con números similares que va mejorando.
             2. Usa el VEREDICTO DEL MOTOR de cada empresa y explica en lenguaje sencillo qué significan sus indicadores
                clave (Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield, upside). Si tu conclusión difiere del ranking
                del motor, explica claramente por qué con base en los datos.
             3. Arma una TABLA COMPARATIVA en formato markdown: una fila por criterio (Calidad del negocio, Salud financiera,
-               Precio / valuación, Crecimiento, Generación de caja, Riesgo, Categoría del motor) y una columna por empresa.
+               Precio / valuación, Crecimiento, Generación de caja, Riesgo, Tendencia (mejorando / empeorando), Categoría del motor)
+               y una columna por empresa.
                En cada celda pon una evaluación corta y marca con la palabra GANA la mejor empresa de cada criterio.
             4. MEJOR OBJETIVAMENTE: indica si alguna empresa es superior a las demás en la mayoría de los criterios,
-               sin importar el perfil. Si ninguna es claramente superior, dilo y explica por qué.
+               incluida su tendencia, sin importar el perfil. Si ninguna es claramente superior, dilo y explica por qué.
             5. MEJOR PARA EL PERFIL: según la tolerancia al riesgo, el objetivo y el horizonte del inversionista,
-               indica qué empresa encaja mejor y por qué, y cuál encaja peor y por qué.
+               indica qué empresa encaja mejor y por qué, y cuál encaja peor y por qué. Considera la tendencia: un perfil
+               conservador debe evitar empresas que van empeorando aunque hoy se vean baratas.
             6. Indica si la mejor objetiva y la mejor para el perfil coinciden. Si no coinciden, explica la diferencia
                en lenguaje sencillo (por ejemplo: una es mejor negocio pero es demasiado riesgosa para un perfil conservador).
 

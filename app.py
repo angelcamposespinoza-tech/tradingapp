@@ -41,7 +41,7 @@ def configurar_ia():
 model = configurar_ia()
 
 # 1. Configuración de la página
-st.set_page_config(page_title="Scanner Superior - Ángel", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Scanner Superior - Ángel", layout="wide", page_icon=":material/monitoring:")
 
 # ESTILOS: Ajuste de colores para máxima legibilidad
 st.markdown("""
@@ -90,15 +90,15 @@ def evaluar_volatilidad(df):
     precio = df['Close'].iloc[-1]
     # Si el movimiento es mayor al 1% del precio, es volatilidad alta
     if atr > (precio * 0.01):
-        return "⚠️ Volatilidad ALTA", "error"
-    return "✅ Volatilidad Normal", "success"
+        return ":material/warning: Volatilidad ALTA", "error"
+    return ":material/check_circle: Volatilidad Normal", "success"
 
 def obtener_etiqueta_pro(rsi, precio, ema200):
-    if rsi < 35 and precio > ema200: return "🔥 CALL (Fuerte)"
-    elif rsi < 35: return "🌱 CALL (Rebote)"
-    elif rsi > 65 and precio < ema200: return "⚠️ PUT (Fuerte)"
-    elif rsi > 65: return "☁️ PUT (Técnico)"
-    else: return "⚖️ Neutral"
+    if rsi < 35 and precio > ema200: return ":material/local_fire_department: CALL (Fuerte)"
+    elif rsi < 35: return ":material/eco: CALL (Rebote)"
+    elif rsi > 65 and precio < ema200: return ":material/warning: PUT (Fuerte)"
+    elif rsi > 65: return ":material/cloud: PUT (Técnico)"
+    else: return ":material/balance: Neutral"
         
 def analizar_volumen(df):
     """
@@ -117,11 +117,11 @@ def analizar_volumen(df):
     es_alza = precio_actual > precio_anterior
     
     if es_volumen_alto and es_alza:
-        return "🚀 VOLUMEN FUERTE (CALL)", "success"
+        return ":material/rocket_launch: VOLUMEN FUERTE (CALL)", "success"
     elif es_volumen_alto and not es_alza:
-        return "📉 VOLUMEN FUERTE (PUT)", "error"
+        return ":material/trending_down: VOLUMEN FUERTE (PUT)", "error"
     else:
-        return "😴 Bajo Volumen (Espera)", "warning"
+        return ":material/hourglass_empty: Bajo Volumen (Espera)", "warning"
 
 def generar_mini_conclusion(res):
     """
@@ -131,35 +131,35 @@ def generar_mini_conclusion(res):
     # Escenario 1: Alta volatilidad - Riesgo elevado
     if "ALTA" in res['VOLATILIDAD']:
         if "CALL" in res['S'] or res['MA'] or res['MP']:
-            return "⚠️ OPERACIÓN DE ALTO RIESGO: Patrón alcista con volatilidad extrema. Si entras, reduce la posición."
+            return ":material/warning: OPERACIÓN DE ALTO RIESGO: Patrón alcista con volatilidad extrema. Si entras, reduce la posición."
         if "PUT" in res['S']:
-            return "⚠️ OPERACIÓN DE ALTO RIESGO: Fuerza bajista con volatilidad elevada. Ajusta bien el Stop Loss."
+            return ":material/warning: OPERACIÓN DE ALTO RIESGO: Fuerza bajista con volatilidad elevada. Ajusta bien el Stop Loss."
         return "⏳ ESPERA: Volatilidad muy alta sin dirección clara."
 
     # Escenario 2: Rupturas fuertes y confirmadas con volumen
-    if res['RUPTURA'] == "🚀 TECHO ROTO" and "success" in res['VT']:
-        return "🚀 COMPRA CONFIRMADA: Ruptura de techo con volumen fuerte. Movimiento alcista con alta probabilidad."
-    if res['RUPTURA'] == "📉 PISO ROTO" and "error" in res['VT']:
-        return "📉 VENTA CONFIRMADA: Ruptura de piso con volumen fuerte. Movimiento bajista con alta probabilidad."
+    if res['RUPTURA'] == ":material/rocket_launch: TECHO ROTO" and "success" in res['VT']:
+        return ":material/rocket_launch: COMPRA CONFIRMADA: Ruptura de techo con volumen fuerte. Movimiento alcista con alta probabilidad."
+    if res['RUPTURA'] == ":material/trending_down: PISO ROTO" and "error" in res['VT']:
+        return ":material/trending_down: VENTA CONFIRMADA: Ruptura de piso con volumen fuerte. Movimiento bajista con alta probabilidad."
 
     # Escenario 3: Patrones perfectos de velas (Martillos) en zonas clave
-    if res['MP'] == "🔨 MARTILLO PERFECTO (CALL)" or (res['MA'] == "🔨 MARTILLO PERFECTO (CALL)" and "CALL" in res['S']):
-        return "🎯 COMPRA TÉCNICA: Martillo perfecto detectado en zona de descuento. Buena relación riesgo/beneficio."
-    if res['MP'] == "☄️ MARTILLO INV. PERFECTO (PUT)" or (res['MA'] == "☄️ MARTILLO INV. PERFECTO (PUT)" and "PUT" in res['S']):
-        return "🎯 VENTA TÉCNICA: Martillo invertido en zona de resistencia. Alta probabilidad de retroceso."
+    if res['MP'] == ":material/hardware: MARTILLO PERFECTO (CALL)" or (res['MA'] == ":material/hardware: MARTILLO PERFECTO (CALL)" and "CALL" in res['S']):
+        return ":material/target: COMPRA TÉCNICA: Martillo perfecto detectado en zona de descuento. Buena relación riesgo/beneficio."
+    if res['MP'] == ":material/hardware: MARTILLO INV. PERFECTO (PUT)" or (res['MA'] == ":material/hardware: MARTILLO INV. PERFECTO (PUT)" and "PUT" in res['S']):
+        return ":material/target: VENTA TÉCNICA: Martillo invertido en zona de resistencia. Alta probabilidad de retroceso."
 
     # Escenario 4: Señales fuertes por tendencia y RSI, pero volumen bajo
     if "Fuerte" in res['S'] and "Espera" in res['V']:
         return "⏳ PACIENCIA: Los indicadores técnicos son muy buenos, pero el volumen es bajo. Espera confirmación institucional."
 
     # Escenario 5: Alineación estándar alcista/bajista
-    if "🔥 CALL" in res['S'] and "success" in res['VT']:
-        return "📈 COMPRA ESTÁNDAR: Tendencia alcista alineada con volumen fuerte."
-    if "⚠️ PUT" in res['S'] and "error" in res['VT']:
-        return "📉 VENTA ESTÁNDAR: Tendencia bajista alineada con volumen de venta."
+    if ":material/local_fire_department: CALL" in res['S'] and "success" in res['VT']:
+        return ":material/trending_up: COMPRA ESTÁNDAR: Tendencia alcista alineada con volumen fuerte."
+    if ":material/warning: PUT" in res['S'] and "error" in res['VT']:
+        return ":material/trending_down: VENTA ESTÁNDAR: Tendencia bajista alineada con volumen de venta."
 
     # Escenario por defecto
-    return "⚖️ OBSERVACIÓN: El mercado se encuentra en rango neutral. No hay una ventaja estadística clara."
+    return ":material/balance: OBSERVACIÓN: El mercado se encuentra en rango neutral. No hay una ventaja estadística clara."
     
 def detectar_martillos(df):
     ultimo = df.iloc[-1]
@@ -176,7 +176,7 @@ def detectar_martillos(df):
     if (mecha_inferior > (cuerpo * 2.5) and 
         mecha_superior < (cuerpo * 0.1) and 
         ultimo['Close'] > ultimo['Open']):
-        return "🔨 MARTILLO PERFECTO (CALL)"
+        return ":material/hardware: MARTILLO PERFECTO (CALL)"
 
     # --- MARTILLO PUT (Cierre en Mínimos) ---
     # 1. Mecha superior es al menos 2.5x el cuerpo.
@@ -185,7 +185,7 @@ def detectar_martillos(df):
     if (mecha_superior > (cuerpo * 2.5) and 
         mecha_inferior < (cuerpo * 0.1) and 
         ultimo['Close'] < ultimo['Open']):
-        return "☄️ MARTILLO INV. PERFECTO (PUT)"
+        return ":material/hardware: MARTILLO INV. PERFECTO (PUT)"
 
     return None
     
@@ -208,20 +208,20 @@ with st.sidebar:
 # ============================================================
 def mostrar_trading():
     # --- BARRA LATERAL ---
-    st.sidebar.header("💰 Gestión de Capital")
+    st.sidebar.header(":material/payments: Gestión de Capital")
     capital_total = st.sidebar.number_input("Dinero en Portafolio ($)", value=1000.0, step=100.0)
     dinero_en_riesgo = capital_total * 0.02
     meta_ganancia = capital_total * 0.04
 
-    st.sidebar.header("📋 Configuración")
+    st.sidebar.header(":material/assignment: Configuración")
     dias_vencimiento = st.sidebar.selectbox("Vencimiento", ("Hoy (0DTE)", "1 a 3 días", "1 semana", "1 mes o más"), index=0)
     tiempos = {"Hoy (0DTE)": ("1m", "1d"), "1 a 3 días": ("5m", "5d"), "1 semana": ("30m", "1mo"), "1 mes o más": ("1d", "1y")}
     v_intervalo, v_periodo = tiempos[dias_vencimiento]
 
     # --- NUEVA LÓGICA DE AGREGAR TICKER POR SECTOR ---
-    st.sidebar.subheader("➕ Añadir Activo Personalizado")
+    st.sidebar.subheader(":material/add_circle: Añadir Activo Personalizado")
     nuevo_t = st.sidebar.text_input("Ticker (Ej: BABA, PFE)", value="").upper().strip()
-    sector_destino = st.sidebar.selectbox("Selecciona el Sector", ("💻 Tecnología", "🏦 Financiero", "📦 Consumo", "⚡ Energía/Otros"))
+    sector_destino = st.sidebar.selectbox("Selecciona el Sector", ("TECNOLOGÍA", "FINANCIERO", "CONSUMO", "ENERGÍA/OTROS"))
 
     # Inicializamos una lista en la memoria de la sesión para guardar lo que agregues
     if "tickers_personalizados" not in st.session_state:
@@ -240,7 +240,7 @@ def mostrar_trading():
     EMPRESAS_TOP = EMPRESAS_BASE + ([t.strip() for t in nuevos_tickers.split(",") if t.strip()] if nuevos_tickers else [])
     # --- COPIAR DESDE AQUÍ ---
     st.sidebar.markdown("---")
-    st.sidebar.header("📊 Auditoría de Estrategia")
+    st.sidebar.header(":material/analytics: Auditoría de Estrategia")
     if st.sidebar.button("Actualizar Historial y Aciertos"):
         with st.spinner("Calculando efectividad..."):
             aciertos, total = verificar_aciertos()
@@ -250,7 +250,7 @@ def mostrar_trading():
             else:
                 st.sidebar.info("Aún no hay datos para auditar.")
     # --- HASTA AQUÍ ---
-    st.title("🚀 SUPERIOR SCANNER")
+    st.title(":material/rocket_launch: SUPERIOR SCANNER")
 
     # 2. MONITOR DE SEÑALES ORGANIZADO POR SECTORES
 
@@ -274,26 +274,26 @@ def mostrar_trading():
                     techo_ref = float(datos_pasados['High'].max())
                     piso_ref = float(datos_pasados['Low'].min())
 
-                    ruptura = "⚖️ Dentro de Rango"
+                    ruptura = ":material/balance: Dentro de Rango"
                     if precio > techo_ref:
-                        ruptura = "🚀 TECHO ROTO"
+                        ruptura = ":material/rocket_launch: TECHO ROTO"
                     elif precio < piso_ref:
-                        ruptura = "📉 PISO ROTO"
+                        ruptura = ":material/trending_down: PISO ROTO"
 
                     # 3. Solución a Incongruencias (Candado de estrategia)
                     # Si rompe piso o es bajista fuerte, no permitimos CALL falso por RSI
                     señal_base = obtener_etiqueta_pro(rsi, precio, ema200)
-                    if ruptura == "📉 PISO ROTO" and "CALL" in señal_base:
-                        señal = "📉 PUT (Caída Libre / Ruptura)"
-                    elif ruptura == "🚀 TECHO ROTO" and "PUT" in señal_base:
-                        señal = "🚀 CALL (Rally / Ruptura)"
+                    if ruptura == ":material/trending_down: PISO ROTO" and "CALL" in señal_base:
+                        señal = ":material/trending_down: PUT (Caída Libre / Ruptura)"
+                    elif ruptura == ":material/rocket_launch: TECHO ROTO" and "PUT" in señal_base:
+                        señal = ":material/rocket_launch: CALL (Rally / Ruptura)"
                     else:
                         señal = señal_base
 
                     # 4. Volumen, Volatilidad y Tendencia
                     vol_txt, vol_tipo = analizar_volumen(df)
                     txt_volatilidad, _ = evaluar_volatilidad(df)
-                    tendencia = "📈 ALCISTA" if precio > ema200 else "📉 BAJISTA"
+                    tendencia = ":material/trending_up: ALCISTA" if precio > ema200 else ":material/trending_down: BAJISTA"
 
                     # 5. Martillos
                     m_actual = detectar_martillos(df.iloc[[-1]])
@@ -308,14 +308,14 @@ def mostrar_trading():
             except: continue
         return resultados
 
-    st.subheader("📊 Monitor de Sectores")
+    st.subheader(":material/analytics: Monitor de Sectores")
 
     # Base de empresas por sector fijo
     sectores = {
-        "💻 Tecnología": ["AAPL", "NVDA", "MSFT", "GOOGL", "AMD"],
-        "🏦 Financiero": ["JPM", "GS", "BAC", "V", "MA"],
-        "📦 Consumo": ["WMT", "COST", "AMZN", "PG", "KO"],
-        "⚡ Energía/Otros": ["XOM", "TSLA", "META", "NFLX", "SPY"]
+        "TECNOLOGÍA": ["AAPL", "NVDA", "MSFT", "GOOGL", "AMD"],
+        "FINANCIERO": ["JPM", "GS", "BAC", "V", "MA"],
+        "CONSUMO": ["WMT", "COST", "AMZN", "PG", "KO"],
+        "ENERGÍA/OTROS": ["XOM", "TSLA", "META", "NFLX", "SPY"]
     }
 
     # Inyectamos dinámicamente los tickers personalizados que guardaste en la sesión
@@ -328,7 +328,9 @@ def mostrar_trading():
                 sectores[sec].append(tk)
 
 
-    tabs = st.tabs(list(sectores.keys()))
+    ICONOS_SECTOR = {"TECNOLOGÍA": ":material/computer:", "FINANCIERO": ":material/account_balance:",
+                     "CONSUMO": ":material/inventory_2:", "ENERGÍA/OTROS": ":material/bolt:"}
+    tabs = st.tabs([f"{ICONOS_SECTOR.get(k, ':material/category:')} {k}" for k in sectores.keys()])
 
     for i, (nombre_sector, lista_tickers) in enumerate(sectores.items()):
         with tabs[i]:
@@ -348,15 +350,15 @@ def mostrar_trading():
                         st.info(res['S'])
 
                     # 3. Alertas Rápidas de Martillos
-                    if res.get('MP'): st.warning(f"✅ Conf: {res['MP']}")
+                    if res.get('MP'): st.warning(f":material/check_circle: Conf: {res['MP']}")
                     if res.get('MA'): st.info(f"⏳ Form: {res['MA']}")
 
                     # 4. VIÑETA DESPLEGABLE CON COMPLEMENTOS Y CONCLUSIÓN
-                    with st.expander("🔍 Ver Datos Técnicos"):
+                    with st.expander(":material/search: Ver Datos Técnicos"):
                         # Generamos el veredicto en tiempo real con los datos guardados
                         conclusion_final = generar_mini_conclusion(res)
 
-                        st.markdown("**📋 Veredicto del Scanner:**")
+                        st.markdown("**:material/assignment: Veredicto del Scanner:**")
                         st.info(conclusion_final)  # Destaca la conclusión en un recuadro limpio
                         st.write("---")
 
@@ -365,12 +367,12 @@ def mostrar_trading():
                         st.markdown(f"**Volatilidad:** {res['VOLATILIDAD']}")
                         st.markdown(f"**Volumen:** {res['V']}")
                         st.write("---")
-                        st.caption(f"🏔️ Techo Ref: ${res['TECHO']:.2f}")
-                        st.caption(f"📉 Piso Ref: ${res['PISO']:.2f}")
+                        st.caption(f":material/vertical_align_top: Techo Ref: ${res['TECHO']:.2f}")
+                        st.caption(f":material/trending_down: Piso Ref: ${res['PISO']:.2f}")
     st.markdown("---")
 
     # 3. ANÁLISIS DETALLADO
-    st.sidebar.header("🔍 Gráfico Detallado")
+    st.sidebar.header(":material/search: Gráfico Detallado")
     ticker_ind = st.sidebar.text_input("Ticker para Graficar", value="META").upper()
     data = yf.download(ticker_ind, period=v_periodo, interval=v_intervalo, progress=False)
 
@@ -400,9 +402,9 @@ def mostrar_trading():
         # 3. LÓGICA DE RUPTURA
         ruptura_texto = ""
         if precio_actual > techo_ref:
-            ruptura_texto = "🚀 ¡TECHO ROTO! (Posible Rally)"
+            ruptura_texto = ":material/rocket_launch: ¡TECHO ROTO! (Posible Rally)"
         elif precio_actual < piso_ref:
-            ruptura_texto = "📉 ¡PISO ROTO! (Caída Libre)"
+            ruptura_texto = ":material/trending_down: ¡PISO ROTO! (Caída Libre)"
 
         # --- FILA 1: GRÁFICO Y MINI PANEL ---
         col_graf, col_info = st.columns([4, 1])
@@ -429,19 +431,19 @@ def mostrar_trading():
             st.plotly_chart(fig, use_container_width=True)
 
         with col_info:
-            st.subheader(f"🏷️ {ticker_ind}")
+            st.subheader(f":material/sell: {ticker_ind}")
             st.metric("Precio Actual", f"${precio_actual:,.2f}")
             if ruptura_texto: st.warning(ruptura_texto) # Mostramos el aviso si hay ruptura
 
             st.write("---")
-            st.subheader("🎯 Señal")
+            st.subheader(":material/target: Señal")
             st.write(f"Estado: **{etiqueta_ind}**")
             st.metric("RSI", f"{rsi_val:.1f}")
 
             st.write("---")
             st.markdown(f"**Referencia ({dias_vencimiento})**")
-            st.metric("🏔️ Techo", f"${techo_ref:.2f}")
-            st.metric("📉 Piso", f"${piso_ref:.2f}")
+            st.metric(":material/vertical_align_top: Techo", f"${techo_ref:.2f}")
+            st.metric(":material/trending_down: Piso", f"${piso_ref:.2f}")
 
             # --- 1. NUEVO: Lógica de Volumen del Profesor ---
             vol_txt_ind, vol_tipo_ind = analizar_volumen(data)
@@ -461,9 +463,9 @@ def mostrar_trading():
 
             # --- 3. LO QUE YA TENÍAS: Tendencia EMA ---
             if precio_actual > ema200_actual:
-                st.success("📈 ALCISTA")
+                st.success(":material/trending_up: ALCISTA")
             else:
-                st.error("📉 BAJISTA")
+                st.error(":material/trending_down: BAJISTA")
 
             st.write("---")
 
@@ -473,18 +475,18 @@ def mostrar_trading():
 
         # --- FILA 2: NOTICIAS (ANCHO COMPLETO) ---
         st.markdown("---")
-        st.subheader(f"📰 Central de Noticias: {ticker_ind}")
+        st.subheader(f":material/newspaper: Central de Noticias: {ticker_ind}")
         c1, c2, c3 = st.columns(3)
-        c1.link_button(f"🌐 Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker_ind}/news", use_container_width=True)
-        c2.link_button(f"🔍 Google Finance", f"https://www.google.com/finance/quote/{ticker_ind}", use_container_width=True)
-        c3.link_button(f"🧠 Seeking Alpha", f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
+        c1.link_button("Yahoo Finance", icon=":material/public:", url= f"https://finance.yahoo.com/quote/{ticker_ind}/news", use_container_width=True)
+        c2.link_button("Google Finance", icon=":material/search:", url= f"https://www.google.com/finance/quote/{ticker_ind}", use_container_width=True)
+        c3.link_button("Seeking Alpha", icon=":material/psychology:", url= f"https://seekingalpha.com/symbol/{ticker_ind}", use_container_width=True)
 
         # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
      # --- FILA 3: COPILOTO IA (ANCHO COMPLETO ABAJO) ---
         # --- FILA 3: COPILOTO IA ---
         st.markdown("---")
         with st.container():
-            st.subheader("🤖 Pregúntame tus dudas")
+            st.subheader(":material/smart_toy: Pregúntame tus dudas")
 
             try:
                 raw_news = yf.Ticker(ticker_ind).news
@@ -512,7 +514,7 @@ def mostrar_trading():
                 TAREA: Analiza los datos y responde a: {duda}
 
                 REGLA DE FORMATO: Al final de tu respuesta, DEBES incluir una sección llamada 
-                '📢 CONCLUSIÓN SIMPLE Y PLAN DE ACCIÓN' con este formato:
+                'CONCLUSIÓN SIMPLE Y PLAN DE ACCIÓN' con este formato (no uses emojis):
                 1. ¿Qué significa esto?
                 2. ¿Qué hacer HOY con la bolsa cerrada?
                 3. ¿Qué hacer MAÑANA a las 8:00 AM?
@@ -527,7 +529,7 @@ def mostrar_trading():
                             # Guardamos en la nube
                         except Exception as e:
                             if "429" in str(e) or "quota" in str(e).lower():
-                                st.warning("⚠️ Cuota excedida. Respondiendo con datos técnicos.")
+                                st.warning(":material/warning: Cuota excedida. Respondiendo con datos técnicos.")
                                 res_simple = model.generate_content(contexto.replace("Usa Google Search", "Ignora la búsqueda"))
                                 st.write(res_simple.text)
                             else:
@@ -537,7 +539,7 @@ def mostrar_trading():
     # --- COLOCAR AL FINAL DE TU ARCHIVO SUSTITUYENDO EL ANTERIOR ---
 
     st.markdown("---")
-    st.header("📊 Laboratorio Estadístico (Backtesting de Datos)")
+    st.header(":material/analytics: Laboratorio Estadístico (Backtesting de Datos)")
 
     archivo_datos = st.file_uploader("Sube tu archivo CSV histórico (Ej: Datos históricos NVDA.csv)", type=["csv"])
 
@@ -587,7 +589,7 @@ def mostrar_trading():
                     abajo_de_todas = fila['Cierre'] < min(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
                     arriba_de_todas = fila['Cierre'] > max(fila['MA20'], fila['MA40'], fila['MA100'], fila['MA200'])
 
-                    # --- 🔨 MARTILLO CALL MODIFICADO (Cola >= 50% del Cuerpo) ---
+                    # --- MARTILLO CALL MODIFICADO (Cola >= 50% del Cuerpo) ---
                     # Ahora la mecha inferior solo necesita ser la mitad de la caja (cuerpo * 0.5)
                     if (mecha_inferior >= (cuerpo * 0.5) and 
                         mecha_superior < (cuerpo * 0.40) and 
@@ -595,8 +597,8 @@ def mostrar_trading():
 
                         total_call += 1
                         ganó = vela_siguiente['Cierre'] > fila['Cierre']
-                        resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
-                        fechas_martillos_call.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
+                        resultado_txt = ":material/check_circle: GANADORA" if ganó else ":material/cancel: PERDEDORA"
+                        fechas_martillos_call.append(f":material/calendar_today: {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
 
                         if ganó:
                             aciertos_call += 1
@@ -606,7 +608,7 @@ def mostrar_trading():
                                 "arriba_200": fila['Cierre'] > fila['MA200']
                             })
 
-                    # --- ☄️ MARTILLO INVERTIDO PUT MODIFICADO (Cola >= 50% del Cuerpo) ---
+                    # --- MARTILLO INVERTIDO PUT MODIFICADO (Cola >= 50% del Cuerpo) ---
                     # Ahora la mecha superior solo necesita ser la mitad de la caja (cuerpo * 0.5)
                     if (mecha_superior >= (cuerpo * 0.5) and 
                         mecha_inferior < (cuerpo * 0.40) and 
@@ -614,8 +616,8 @@ def mostrar_trading():
 
                         total_put += 1
                         ganó = vela_siguiente['Cierre'] < fila['Cierre']
-                        resultado_txt = "✅ GANADORA" if ganó else "❌ PERDEDORA"
-                        fechas_martillos_put.append(f"📅 {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
+                        resultado_txt = ":material/check_circle: GANADORA" if ganó else ":material/cancel: PERDEDORA"
+                        fechas_martillos_put.append(f":material/calendar_today: {fecha_actual} | Cierre Hoy: ${fila['Cierre']:.2f} -> Mañana: ${vela_siguiente['Cierre']:.2f} ({resultado_txt})")
 
                         if ganó:
                             aciertos_put += 1
@@ -626,19 +628,19 @@ def mostrar_trading():
                             })
 
                 # 3. MOSTRAR RESULTADOS CON PORCENTAJES REALES DE ÉXITO
-                st.subheader("📊 Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
+                st.subheader(":material/analytics: Reporte Técnico Realista (Evaluación a 1 Vela Adelante)")
 
                 pct_call = 0.0
                 pct_put = 0.0
 
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.markdown("### 🔨 Patrón Martillo (CALL)")
+                    st.markdown("### :material/hardware: Patrón Martillo (CALL)")
                     if total_call > 0:
                         pct_call = (aciertos_call / total_call) * 100
                         st.metric("Efectividad Histórica General", f"{pct_call:.1f}%", f"{aciertos_call}/{total_call} Señales")
 
-                        with st.expander("🔍 Historial de Fechas y Cierres (CALL)"):
+                        with st.expander(":material/search: Historial de Fechas y Cierres (CALL)"):
                             for f in fechas_martillos_call:
                                 st.write(f)
 
@@ -655,23 +657,23 @@ def mostrar_trading():
                             p_tend_call = (a_tendencia / aciertos_call) * 100 if aciertos_call > 0 else 0
 
                             st.write(f"- Con Medias Ordenadas (20>40>100>200): **{a_orden} aciertos**")
-                            st.caption(f"📢 *En el {p_orden_call:.1f}% de los casos ganadores, el martillo funcionó teniendo las medias ordenadas a favor.*")
+                            st.caption(f":material/campaign: *En el {p_orden_call:.1f}% de los casos ganadores, el martillo funcionó teniendo las medias ordenadas a favor.*")
 
                             st.write(f"- Comprando abajo de todas las medias (Piso): **{a_piso} aciertos**")
-                            st.caption(f"📢 *En el {p_piso_call:.1f}% de los casos ganadores, el martillo funcionó estando por debajo de todas las medias.*")
+                            st.caption(f":material/campaign: *En el {p_piso_call:.1f}% de los casos ganadores, el martillo funcionó estando por debajo de todas las medias.*")
 
                             st.write(f"- A favor de tendencia (Arriba de MA200): **{a_tendencia} aciertos**")
-                            st.caption(f"📢 *En el {p_tend_call:.1f}% de los casos ganadores, el martillo funcionó estando por encima de la media de 200.*")
+                            st.caption(f":material/campaign: *En el {p_tend_call:.1f}% de los casos ganadores, el martillo funcionó estando por encima de la media de 200.*")
                     else:
                         st.info("No se encontraron martillos con estas especificaciones.")
 
                 with c2:
-                    st.markdown("### ☄️ Martillo Invertido (PUT)")
+                    st.markdown("### :material/hardware: Martillo Invertido (PUT)")
                     if total_put > 0:
                         pct_put = (aciertos_put / total_put) * 100
                         st.metric("Efectividad Histórica General", f"{pct_put:.1f}%", f"{aciertos_put}/{total_put} Señales")
 
-                        with st.expander("🔍 Historial de Fechas y Cierres (PUT)"):
+                        with st.expander(":material/search: Historial de Fechas y Cierres (PUT)"):
                             for f in fechas_martillos_put:
                                 st.write(f)
 
@@ -688,19 +690,19 @@ def mostrar_trading():
                             p_tend_put = (p_tendencia / aciertos_put) * 100 if aciertos_put > 0 else 0
 
                             st.write(f"- Con Medias Ordenadas (20<40<100<200): **{p_orden} aciertos**")
-                            st.caption(f"📢 *En el {p_orden_put:.1f}% de los casos ganadores, el martillo invertido funcionó teniendo las medias ordenadas a favor.*")
+                            st.caption(f":material/campaign: *En el {p_orden_put:.1f}% de los casos ganadores, el martillo invertido funcionó teniendo las medias ordenadas a favor.*")
 
                             st.write(f"- Cazando el techo (Arriba de todas las medias): **{p_techo} aciertos**")
-                            st.caption(f"📢 *En el {p_techo_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por encima de todas las medias.*")
+                            st.caption(f":material/campaign: *En el {p_techo_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por encima de todas las medias.*")
 
                             st.write(f"- A favor de tendencia (Debajo de MA200): **{p_tendencia} aciertos**")
-                            st.caption(f"📢 *En el {p_tend_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por debajo de la media de 200.*")
+                            st.caption(f":material/campaign: *En el {p_tend_put:.1f}% de los casos ganadores, el martillo invertido funcionó estando por debajo de la media de 200.*")
                     else:
                         st.info("No se encontraron martillos invertidos con estas especificaciones.")
 
                 # --- NUEVA SECCIÓN: CLASIFICADOR DE ESCENARIOS DE PRECISIÓN ---
                 st.markdown("---")
-                st.subheader("🎯 Matriz de Micro-Contextos (Análisis Avanzado Inter-Medias)")
+                st.subheader(":material/target: Matriz de Micro-Contextos (Análisis Avanzado Inter-Medias)")
 
                 micro_datos_call = []
                 micro_datos_put = []
@@ -741,7 +743,7 @@ def mostrar_trading():
                 df_final_combinado = pd.DataFrame() # DataFrame para unificar y buscar el ganador absoluto
 
                 with col_m1:
-                    st.write("**🔍 Desglose de Precisión para CALL:**")
+                    st.write("**:material/search: Desglose de Precisión para CALL:**")
                     if micro_datos_call:
                         df_mc = pd.DataFrame(micro_datos_call)
                         df_res = df_mc.groupby("Escenario")["Resultado"].agg(['count', 'sum']).reset_index()
@@ -755,7 +757,7 @@ def mostrar_trading():
                         st.caption("Sin datos.")
 
                 with col_m2:
-                    st.write("**🔍 Desglose de Precisión para PUT:**")
+                    st.write("**:material/search: Desglose de Precisión para PUT:**")
                     if micro_datos_put:
                         df_mp = pd.DataFrame(micro_datos_put)
                         df_res_p = df_mp.groupby("Escenario")["Resultado"].agg(['count', 'sum']).reset_index()
@@ -770,7 +772,7 @@ def mostrar_trading():
 
                 # --- NUEVA LÓGICA DE VEREDICTO POR MAXIMA EFECTIVIDAD DE MATRIZ ---
                 st.markdown("---")
-                st.subheader("🏆 Veredicto de Máxima Certeza Histórica")
+                st.subheader(":material/emoji_events: Veredicto de Máxima Certeza Histórica")
 
                 if df_final_combinado.empty:
                     st.warning("No hay suficientes datos analizados para extraer una ventaja estadística.")
@@ -788,16 +790,15 @@ def mostrar_trading():
                         totales_top = mejor_escenario["Señales Totales"]
                         tipo_operacion = mejor_escenario["Tipo"]
 
-                        icono = "🟢 [CALL]" if tipo_operacion == "CALL" else "🔴 [PUT]"
 
                         st.success(
-                            f"👑 **ESTRATEGIA ÓPTIMA DETECTADA:** El escenario más certero en la historia de este activo es cuando se opera un **{tipo_operacion}** bajo la configuración: \n\n"
-                            f"👉 **{nombre_config}** \n\n"
+                            f":material/workspace_premium: **ESTRATEGIA ÓPTIMA DETECTADA:** El escenario más certero en la historia de este activo es cuando se opera un **{tipo_operacion}** bajo la configuración: \n\n"
+                            f":material/arrow_forward: **{nombre_config}** \n\n"
                             f"Este micro-contexto específico arrojó una efectividad quirúrgica del **{efectividad_top:.1f}%** "
                             f"({aciertos_top}/{totales_top} aciertos). Cuando detectes este escenario en el monitor, tu probabilidad de éxito es máxima."
                         )
                     else:
-                        st.info("⚠️ Los escenarios con mayor porcentaje tienen muy pocas señales en el archivo. Se requiere una muestra histórica más amplia para emitir un veredicto seguro.")
+                        st.info(":material/warning: Los escenarios con mayor porcentaje tienen muy pocas señales en el archivo. Se requiere una muestra histórica más amplia para emitir un veredicto seguro.")
 
             except Exception as e:
                 st.error(f"Error procesando el archivo CSV: {e}")
@@ -870,6 +871,10 @@ def _resumen_metricas_texto(nombre_empresa, datos):
         else:
             valores_txt = ", ".join(f"{v:.2f}" for v in info["valores"])
             etiqueta_extra = f" (datos año por año, DE MÁS RECIENTE A MÁS ANTIGUO: [{valores_txt}])"
+            tend = info.get("tendencia")
+            if tend:
+                etiqueta_extra += (f" | tendencia calculada: {tend['direccion']} ({tend['calidad']}), "
+                                   f"promedio años antiguos {tend['antiguo']:.2f} vs recientes {tend['reciente']:.2f}")
         lineas.append(f"- {info['label']}: {info['promedio']:.2f}{etiqueta_extra}")
     return "\n".join(lineas)
 
@@ -1422,6 +1427,60 @@ PERFIL_AYUDA = {
 }
 
 
+# Indicadores donde un número MÁS BAJO es mejor (deuda y múltiplos de valuación)
+MENOR_ES_MEJOR = {"debt_equity", "pe_ratio", "ps_ratio", "pe_cash_flow_ratio", "price_book_ratio", "peg_ratio"}
+
+ORDEN_DATOS_OPCIONES = ["MÁS RECIENTE PRIMERO", "MÁS ANTIGUO PRIMERO"]
+
+
+def _calcular_tendencia(key, valores):
+    """Compara los años recientes contra los antiguos. 'valores' va del más reciente al más antiguo.
+    Regresa None si hay menos de 3 datos."""
+    if len(valores) < 3:
+        return None
+    k = len(valores) // 2
+    reciente = sum(valores[:k]) / k
+    antiguo = sum(valores[-k:]) / k
+    dif = reciente - antiguo
+    if key in CAMPOS_CON_SIMBOLO_PORCENTAJE:
+        cambio_relevante = abs(dif) >= 2.0  # 2 puntos porcentuales o más
+    elif antiguo != 0:
+        cambio_relevante = abs(dif) / abs(antiguo) >= 0.10  # 10% o más
+    else:
+        cambio_relevante = dif != 0
+    if not cambio_relevante:
+        return {"direccion": "ESTABLE", "calidad": "neutral", "reciente": reciente, "antiguo": antiguo}
+    direccion = "SUBIENDO" if dif > 0 else "BAJANDO"
+    sube_es_bueno = key not in MENOR_ES_MEJOR
+    calidad = "favorable" if ((direccion == "SUBIENDO") == sube_es_bueno) else "desfavorable"
+    return {"direccion": direccion, "calidad": calidad, "reciente": reciente, "antiguo": antiguo}
+
+
+def _mostrar_tendencias(datos):
+    """Panel con la tendencia de cada indicador con 3 o más años (sin IA)."""
+    tendencias = [(info["label"], info["tendencia"]) for info in datos.values() if info.get("tendencia")]
+    if not tendencias:
+        return
+    estilos = {"favorable": "green", "desfavorable": "red", "neutral": "gray"}
+    iconos = {"SUBIENDO": "trending_up", "BAJANDO": "trending_down", "ESTABLE": "trending_flat"}
+    n_fav = sum(1 for _, t in tendencias if t["calidad"] == "favorable")
+    n_des = sum(1 for _, t in tendencias if t["calidad"] == "desfavorable")
+    n_neu = len(tendencias) - n_fav - n_des
+    with st.container(border=True):
+        st.markdown("**:material/insights: TENDENCIA DE LOS INDICADORES (SIN IA)**")
+        st.caption(f"{n_fav} MEJORANDO · {n_des} EMPEORANDO · {n_neu} ESTABLES. COMPARA LOS AÑOS MÁS RECIENTES CONTRA LOS MÁS "
+                   "ANTIGUOS DE CADA FILA (MÍNIMO 3 DATOS). VERDE = VA MEJORANDO, ROJO = VA EMPEORANDO, GRIS = ESTABLE. "
+                   "EN DEUDA Y MÚLTIPLOS DE VALUACIÓN, BAJAR ES BUENO.")
+        for calidad in ("favorable", "desfavorable", "neutral"):
+            chips = [
+                f":{estilos[calidad]}-badge[:material/{iconos[t['direccion']]}: {label.upper()}: {t['direccion']} "
+                f"(DE {t['antiguo']:.2f} A {t['reciente']:.2f})]"
+                for label, t in tendencias if t["calidad"] == calidad
+            ]
+            if chips:
+                st.markdown(" ".join(chips))
+
+
 def _prefijo_lp(i):
     """Prefijo de las claves de cada formulario. La empresa 1 conserva las claves originales ('lp_')."""
     return "lp_" if i == 0 else f"lp{i + 1}_"
@@ -1452,8 +1511,16 @@ def _quitar_empresa_lp():
 def _formulario_empresa(i):
     """Dibuja el formulario completo de una empresa (indicadores, motor y veredicto) y regresa sus datos."""
     p = _prefijo_lp(i)
-    ticker_lp = st.text_input("TICKER O NOMBRE DE LA EMPRESA", key=f"{p}ticker_actual", placeholder="EJ: AAPL")
-    st.info("✏️ Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
+    col_t1, col_t2 = st.columns([3, 2])
+    with col_t1:
+        ticker_lp = st.text_input("TICKER O NOMBRE DE LA EMPRESA", key=f"{p}ticker_actual", placeholder="EJ: AAPL")
+    with col_t2:
+        orden_datos = st.radio(
+            "ORDEN DE LOS DATOS QUE PEGAS", ORDEN_DATOS_OPCIONES, key=f"{p}orden_datos", horizontal=True,
+            help="REVISA EL ENCABEZADO DE LA TABLA DE DONDE COPIAS: SI EL AÑO MÁS NUEVO ESTÁ A LA IZQUIERDA, ELIGE 'MÁS RECIENTE PRIMERO'; "
+                 "SI ESTÁ A LA DERECHA (COMO EN MUCHOS ESTADOS FINANCIEROS), ELIGE 'MÁS ANTIGUO PRIMERO'. LA APP LOS ACOMODA SOLA.",
+        )
+    st.info(":material/edit: Elige arriba el ORDEN DE LOS DATOS según la tabla de donde copias. Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
 
     datos_actuales = {}
     for key, label in METRICAS_LP:
@@ -1468,18 +1535,23 @@ def _formulario_empresa(i):
             try:
                 # Acepta números con o sin % pegado, separados por espacio o tabulador
                 valores = _parsear_valores_porcentaje(valor_input)
+                if orden_datos == "MÁS ANTIGUO PRIMERO":
+                    valores = valores[::-1]  # internamente siempre: más reciente primero
                 if es_promedio_5y and len(valores) > 1:
-                    st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
+                    st.warning(f":material/warning: '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
                 promedio = sum(valores) / len(valores)
             except ValueError:
-                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio. (Texto recibido: '{valor_input}')")
+                st.error(f":material/warning: Revisa el formato de '{label}': deben ser números separados por espacio. (Texto recibido: '{valor_input}')")
 
         datos_actuales[key] = {
             "label": label,
             "valores": valores,
             "promedio": promedio,
             "es_promedio_5y": es_promedio_5y,
+            "tendencia": None if es_promedio_5y else _calcular_tendencia(key, valores),
         }
+
+    _mostrar_tendencias(datos_actuales)
 
     # --- INDICADORES DEL MOTOR DE TRIBUNALES ---
     st.markdown("---")
@@ -1538,7 +1610,7 @@ def _formulario_empresa(i):
               on_click=_limpiar_formulario_lp, args=(p,))
 
     # --- Resumen de lo capturado ---
-    with st.expander("📋 Ver resumen de los datos capturados en el formulario actual"):
+    with st.expander(":material/assignment: Ver resumen de los datos capturados en el formulario actual"):
         hay_datos = False
         for info in datos_actuales.values():
             if info["promedio"] is not None:
@@ -1595,13 +1667,13 @@ def _extraer_linea(texto, etiqueta):
 
 
 def mostrar_largo_plazo():
-    st.title("💼 Análisis Fundamental - Inversión a Largo Plazo")
+    st.title(":material/business_center: Análisis Fundamental - Inversión a Largo Plazo")
     st.caption("CAPTURA LOS INDICADORES DE HASTA 4 EMPRESAS, REVISA EL VEREDICTO DEL MOTOR Y PIDE A LA IA UN ANÁLISIS INDIVIDUAL O UNA COMPARACIÓN SEGÚN TU PERFIL DE INVERSIONISTA.")
 
     # ============================================================
     # DESCUBRIR OPORTUNIDADES DE INVERSIÓN (búsqueda cualitativa)
     # ============================================================
-    with st.expander("🔎 Descubrir Oportunidades de Inversión", expanded=False):
+    with st.expander(":material/travel_explore: Descubrir Oportunidades de Inversión", expanded=False):
         st.caption("Busca empresas interesantes en cualquier país o sector, con base principalmente en investigación cualitativa de mercado (tendencias, catalizadores, posicionamiento competitivo).")
 
         col_op1, col_op2 = st.columns(2)
@@ -1627,7 +1699,7 @@ def mostrar_largo_plazo():
             key="lp_sectores_seleccionados",
         )
 
-        if st.button("🚀 Buscar Oportunidades"):
+        if st.button(":material/rocket_launch: Buscar Oportunidades"):
             if not model:
                 st.error("IA no configurada.")
             else:
@@ -1665,7 +1737,7 @@ def mostrar_largo_plazo():
                 4. Un riesgo o duda relevante a vigilar
 
                 Aclara al inicio que esto es un punto de partida para investigar más a fondo, no una
-                recomendación de compra. Responde en español, en formato de lista clara por empresa.
+                recomendación de compra. Responde en español, en formato de lista clara por empresa. No uses emojis.
                 """
                 with st.spinner("Buscando oportunidades de inversión..."):
                     try:
@@ -1673,11 +1745,11 @@ def mostrar_largo_plazo():
                         st.markdown(resultado_oportunidades)
                     except Exception as e:
                         if "429" in str(e) or "quota" in str(e).lower():
-                            st.warning("⚠️ Cuota de búsqueda excedida. Intenta de nuevo en unos minutos.")
+                            st.warning(":material/warning: Cuota de búsqueda excedida. Intenta de nuevo en unos minutos.")
                         else:
                             st.error(f"Error buscando oportunidades: {e}")
 
-        st.caption("💡 Cuando encuentres una que te interese, escribe su ticker abajo en 'Ticker o Nombre de la Empresa' y llena sus indicadores para el análisis completo.")
+        st.caption(":material/lightbulb: Cuando encuentres una que te interese, escribe su ticker abajo en 'Ticker o Nombre de la Empresa' y llena sus indicadores para el análisis completo.")
 
     st.markdown("---")
 
@@ -1762,7 +1834,7 @@ def mostrar_largo_plazo():
 
     # --- Análisis con IA ---
     st.markdown("---")
-    st.subheader("🤖 Análisis con IA")
+    st.subheader(":material/smart_toy: Análisis con IA")
 
     opciones_analisis = ["ANÁLISIS INDIVIDUAL"]
     if len(empresas_con_datos) >= 2:
@@ -1781,9 +1853,9 @@ def mostrar_largo_plazo():
     datos_actuales = empresa_sel["datos"]
     veredicto_txt = empresa_sel["veredicto_txt"]
 
-    incluir_cualitativo = st.checkbox("🌐 Incluir análisis cualitativo (buscar noticias e info reciente de la empresa)", value=True)
+    incluir_cualitativo = st.checkbox(":material/public: Incluir análisis cualitativo (buscar noticias e info reciente de la empresa)", value=True)
 
-    if st.button("🔍 Generar Análisis"):
+    if st.button(":material/search: Generar Análisis"):
         if not model:
             st.error("IA no configurada.")
 
@@ -1793,7 +1865,7 @@ def mostrar_largo_plazo():
             hay_datos_cuant = any(info["promedio"] is not None for info in datos_actuales.values())
 
             if not hay_datos_cuant:
-                st.warning("⚠️ No llenaste ningún indicador cuantitativo. Llena al menos uno antes de generar el análisis.")
+                st.warning(":material/warning: No llenaste ningún indicador cuantitativo. Llena al menos uno antes de generar el análisis.")
             else:
                 # --- PROMPT 1: ANÁLISIS CUANTITATIVO ---
                 prompt_cuant = f"""
@@ -1813,12 +1885,13 @@ def mostrar_largo_plazo():
                 5. IMPORTANTE: evalúa si los márgenes y demás indicadores son CONSISTENTES en el tiempo o
                    presentan alta volatilidad/tendencia negativa. Usa los datos por año que vienen entre paréntesis
                    junto a cada indicador (no solo el promedio) para juzgar esta consistencia.
+                   Cuando un indicador traiga "tendencia calculada", úsala para decir si la empresa está creciendo o decayendo.
                 6. Explica en lenguaje muy sencillo el VEREDICTO DEL MOTOR: qué significa su categoría, qué dicen
                    Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield y el upside contra el Fair Value, y qué
                    significan sus alertas (si las hay). Si tu conclusión difiere del motor, explica claramente por qué;
                    no lo contradigas sin dar razones basadas en los datos.
 
-                Termina con una sección '📢 CONCLUSIÓN CUANTITATIVA' explicando el resultado.
+                Termina con una sección 'CONCLUSIÓN CUANTITATIVA' explicando el resultado. No uses emojis.
                 Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
                 CALIFICACIÓN_CUANTITATIVA: X/10
                 (reemplaza X por tu calificación del 1 al 10 sobre la solidez cuantitativa de la empresa)
@@ -1918,10 +1991,10 @@ def mostrar_largo_plazo():
                 Evalúa SOLO lo que puedas verificar con los datos e información disponible, no inventes cifras.
 
                 FORMATO DE RESPUESTA: Para cada uno de los 5 pilares, da un resumen breve con evidencia
-                encontrada y ciérralo con una etiqueta: 🟢 Fuerte / 🟡 Moderado / 🔴 Débil. Para el pilar 5,
+                encontrada y ciérralo con una etiqueta: FUERTE / MODERADO / DÉBIL (sin emojis). Para el pilar 5,
                 si detectas alguna señal, indícalo claramente; si no detectas ninguna, dilo también.
 
-                Termina con una sección '🌐 CONCLUSIÓN CUALITATIVA' resumiendo los 5 pilares.
+                Termina con una sección 'CONCLUSIÓN CUALITATIVA' resumiendo los 5 pilares.
                 Después, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
                 CALIFICACIÓN_CUALITATIVA: X/10
                 (reemplaza X por tu calificación del 1 al 10 sobre la calidad cualitativa del negocio, considerando
@@ -1932,7 +2005,7 @@ def mostrar_largo_plazo():
                             texto_cual = model.generate_content(prompt_cual).text
                         except Exception as e:
                             if "429" in str(e) or "quota" in str(e).lower():
-                                st.warning("⚠️ Cuota de búsqueda excedida. Generando el análisis cualitativo sin Google Search.")
+                                st.warning(":material/warning: Cuota de búsqueda excedida. Generando el análisis cualitativo sin Google Search.")
                                 try:
                                     prompt_cual_sin_busqueda = prompt_cual.replace("usando Google Search para investigar", "basándote en tu conocimiento general sobre")
                                     texto_cual = model.generate_content(prompt_cual_sin_busqueda).text
@@ -1944,7 +2017,7 @@ def mostrar_largo_plazo():
                 # --- Mostrar resultados individuales ---
                 if texto_cuant is not None:
                     score_cuant = _extraer_calificacion(texto_cuant, "CALIFICACIÓN_CUANTITATIVA")
-                    st.markdown("### 📐 Análisis Cuantitativo")
+                    st.markdown("### :material/calculate: Análisis Cuantitativo")
                     st.markdown(texto_cuant)
                     if score_cuant is not None:
                         st.metric("Calificación Cuantitativa", f"{score_cuant:.1f}/10")
@@ -1953,7 +2026,7 @@ def mostrar_largo_plazo():
                 if texto_cual is not None:
                     score_cual = _extraer_calificacion(texto_cual, "CALIFICACIÓN_CUALITATIVA")
                     st.markdown("---")
-                    st.markdown("### 🌐 Análisis Cualitativo")
+                    st.markdown("### :material/public: Análisis Cualitativo")
                     st.markdown(texto_cual)
                     if score_cual is not None:
                         st.metric("Calificación Cualitativa", f"{score_cual:.1f}/10")
@@ -1978,7 +2051,7 @@ def mostrar_largo_plazo():
 
                     {veredicto_txt}
 
-                    TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa, combinando ambos análisis:
+                    TAREA: Da una CONCLUSIÓN GENERAL en español, sencilla y directa (sin emojis), combinando ambos análisis:
                     indica si {nombre_emp} es una buena opción de inversión a largo plazo, qué pesa más
                     (lo cuantitativo o lo cualitativo) y por qué. No repitas todo el detalle, sintetiza lo esencial.
                     Menciona en una frase la categoría del motor y si el análisis cualitativo la confirma o la pone en duda.
@@ -1995,7 +2068,7 @@ def mostrar_largo_plazo():
                         try:
                             texto_sintesis = model.generate_content(prompt_sintesis).text
                             st.markdown("---")
-                            st.markdown("### 🏁 Conclusión General")
+                            st.markdown("### :material/flag: Conclusión General")
                             st.markdown(texto_sintesis)
                             if promedio_general is not None:
                                 st.metric("Calificación Promedio General", f"{promedio_general:.1f}/10")
@@ -2081,7 +2154,7 @@ def mostrar_largo_plazo():
                     _mostrar_comparacion(response.text)
                 except Exception as e:
                     if "429" in str(e) or "quota" in str(e).lower():
-                        st.warning("⚠️ Cuota excedida en la búsqueda. Generando análisis solo con los datos numéricos.")
+                        st.warning(":material/warning: Cuota excedida en la búsqueda. Generando análisis solo con los datos numéricos.")
                         try:
                             prompt_sin_busqueda = prompt.replace(instruccion_busqueda, "") if instruccion_busqueda else prompt
                             response = model.generate_content(prompt_sin_busqueda)
@@ -2094,7 +2167,7 @@ def mostrar_largo_plazo():
     # --- Chat libre sobre las empresas ---
     st.markdown("---")
     with st.container():
-        st.subheader("💬 Pregúntale al Analista")
+        st.subheader(":material/forum: Pregúntale al Analista")
         duda_lp = st.chat_input("Pregunta algo sobre estas empresas o la comparación...")
         if duda_lp:
             bloques_chat = [
@@ -2102,7 +2175,7 @@ def mostrar_largo_plazo():
                 for e in empresas_con_datos
             ] or ["Aún no hay datos capturados."]
             contexto_chat = f"""
-            Eres un analista financiero fundamental. Habla en español, con lenguaje claro y sencillo.
+            Eres un analista financiero fundamental. Habla en español, con lenguaje claro y sencillo. No uses emojis.
 
             PERFIL DEL INVERSIONISTA:
             {perfil_txt}

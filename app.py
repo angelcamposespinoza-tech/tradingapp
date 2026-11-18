@@ -1407,25 +1407,196 @@ def _resumen_veredicto_texto(res):
     return "\n".join(lineas)
 
 
-def _limpiar_formulario_lp():
+MAX_EMPRESAS_LP = 4
+
+ORDEN_CATEGORIAS = {"DEEP DIVE": 4, "WATCHLIST": 3, "NEUTRAL": 2, "DESCARTADA": 1, "OMITIDA POR MÉTODO": 0}
+
+PERFIL_AYUDA = {
+    "CONSERVADOR": "PRIORIZA NO PERDER: EMPRESAS ESTABLES, CON POCA DEUDA Y FINANZAS MUY SANAS, AUNQUE CREZCAN MENOS.",
+    "MODERADO": "BUSCA UN BALANCE ENTRE CRECIMIENTO Y SEGURIDAD. ACEPTA ALGO DE VOLATILIDAD.",
+    "AGRESIVO": "ACEPTA MÁS RIESGO Y CAÍDAS FUERTES A CAMBIO DE MAYOR CRECIMIENTO POTENCIAL.",
+    "CRECIMIENTO": "QUE LA EMPRESA CREZCA SUS VENTAS Y GANANCIAS MÁS RÁPIDO QUE EL MERCADO.",
+    "DIVIDENDOS / INGRESO": "RECIBIR DINERO PERIÓDICO: DIVIDENDOS ESTABLES Y CRECIENTES, Y FLUJO DE CAJA SÓLIDO.",
+    "VALOR (COMPRAR BARATO)": "COMPRAR BUENAS EMPRESAS POR DEBAJO DE LO QUE VALEN, CON MARGEN DE SEGURIDAD.",
+    "EQUILIBRADO": "UNA MEZCLA DE CALIDAD, CRECIMIENTO Y PRECIO RAZONABLE, SIN UN SOLO ENFOQUE.",
+}
+
+
+def _prefijo_lp(i):
+    """Prefijo de las claves de cada formulario. La empresa 1 conserva las claves originales ('lp_')."""
+    return "lp_" if i == 0 else f"lp{i + 1}_"
+
+
+def _limpiar_formulario_lp(p="lp_"):
     """Se ejecuta ANTES de dibujar la página (on_click), por eso sí puede vaciar los campos sin error."""
     for key, _ in METRICAS_LP:
-        st.session_state[f"lp_input_{key}"] = ""
-        st.session_state[f"lp_chk_{key}"] = False
+        st.session_state[f"{p}input_{key}"] = ""
+        st.session_state[f"{p}chk_{key}"] = False
     for key, _, _ in METRICAS_MOTOR:
-        st.session_state[f"lp_motor_{key}"] = ""
-    st.session_state["lp_motor_financiera"] = False
-    st.session_state["lp_ticker_actual"] = ""
+        st.session_state[f"{p}motor_{key}"] = ""
+    st.session_state[f"{p}motor_financiera"] = False
+    st.session_state[f"{p}ticker_actual"] = ""
+
+
+def _agregar_empresa_lp():
+    st.session_state["lp_num_empresas"] = min(MAX_EMPRESAS_LP, st.session_state.get("lp_num_empresas", 1) + 1)
+
+
+def _quitar_empresa_lp():
+    n = st.session_state.get("lp_num_empresas", 1)
+    if n > 1:
+        _limpiar_formulario_lp(_prefijo_lp(n - 1))
+        st.session_state["lp_num_empresas"] = n - 1
+
+
+def _formulario_empresa(i):
+    """Dibuja el formulario completo de una empresa (indicadores, motor y veredicto) y regresa sus datos."""
+    p = _prefijo_lp(i)
+    ticker_lp = st.text_input("TICKER O NOMBRE DE LA EMPRESA", key=f"{p}ticker_actual", placeholder="EJ: AAPL")
+    st.info("✏️ Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
+
+    datos_actuales = {}
+    for key, label in METRICAS_LP:
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            valor_input = st.text_input(label, key=f"{p}input_{key}", placeholder="Ej: 12 13 14")
+        with col2:
+            es_promedio_5y = st.checkbox("5Y", key=f"{p}chk_{key}", help="Marca si el dato ingresado ya es el promedio de los últimos 5 años")
+
+        valores, promedio = [], None
+        if valor_input.strip():
+            try:
+                # Acepta números con o sin % pegado, separados por espacio o tabulador
+                valores = _parsear_valores_porcentaje(valor_input)
+                if es_promedio_5y and len(valores) > 1:
+                    st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
+                promedio = sum(valores) / len(valores)
+            except ValueError:
+                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio. (Texto recibido: '{valor_input}')")
+
+        datos_actuales[key] = {
+            "label": label,
+            "valores": valores,
+            "promedio": promedio,
+            "es_promedio_5y": es_promedio_5y,
+        }
+
+    # --- INDICADORES DEL MOTOR DE TRIBUNALES ---
+    st.markdown("---")
+    st.markdown("#### :material/balance: INDICADORES DEL MOTOR DE TRIBUNALES")
+    st.caption("UN SOLO DATO POR INDICADOR (EL VALOR ACTUAL). LOS ENCUENTRAS EN INVESTINGPRO, MORNINGSTAR, GURUFOCUS O STOCKANALYSIS. SI FALTA ALGUNO, EL MOTOR LO MARCA COMO SIN DATO. PASA EL MOUSE POR EL ÍCONO DE AYUDA DE CADA CAMPO PARA VER QUÉ SIGNIFICA.")
+    with st.container(border=True):
+        cols_motor = st.columns(3)
+        for idx, (key, label, ejemplo) in enumerate(METRICAS_MOTOR):
+            with cols_motor[idx % 3]:
+                valor_m = st.text_input(label, key=f"{p}motor_{key}", placeholder=ejemplo, help=DEFINICIONES_MOTOR.get(key))
+            dato_m = None
+            if valor_m.strip():
+                try:
+                    dato_m = _parsear_dato_unico(valor_m)
+                except ValueError:
+                    st.error(f"REVISA EL FORMATO DE '{label}': DEBE SER UN SOLO NÚMERO. (TEXTO RECIBIDO: '{valor_m}')")
+            datos_actuales[key] = {
+                "label": label,
+                "valores": [dato_m] if dato_m is not None else [],
+                "promedio": dato_m,
+                "es_promedio_5y": False,
+                "dato_unico": True,
+            }
+        es_financiera = st.checkbox(
+            "ES BANCO, ASEGURADORA O UTILITY (EL MÉTODO NO APLICA)",
+            key=f"{p}motor_financiera",
+            help="EN BANCOS Y ASEGURADORAS LA DEUDA ES SU MATERIA PRIMA Y EN LAS UTILITIES LA GANANCIA ESTÁ REGULADA. EL MOTOR LAS MARCA COMO OMITIDAS PARA NO CALIFICARLAS MAL. VISA, MASTERCARD Y PAYPAL NO CUENTAN COMO BANCOS.",
+        )
+
+    # Si no se capturó el precio, se toma de yfinance con el ticker
+    if datos_actuales["precio_actual"]["promedio"] is None and ticker_lp.strip():
+        precio_auto = _precio_yfinance(ticker_lp.strip().upper())
+        if precio_auto is not None:
+            datos_actuales["precio_actual"]["valores"] = [precio_auto]
+            datos_actuales["precio_actual"]["promedio"] = precio_auto
+            st.caption(f"PRECIO ACTUAL TOMADO DE YFINANCE: {precio_auto:,.2f} USD")
+
+    # Si no se capturó el ROIC de 5 años, se calcula con tu fila de ROIC (los 5 datos más recientes)
+    info_roic_form = datos_actuales.get("roic", {})
+    if datos_actuales["roic_5y"]["promedio"] is None and info_roic_form.get("valores"):
+        roic5_auto, origen_roic5 = None, ""
+        if info_roic_form.get("es_promedio_5y"):
+            roic5_auto = info_roic_form["promedio"]
+            origen_roic5 = "TU DATO DE ROIC MARCADO COMO 5Y"
+        elif len(info_roic_form["valores"]) >= 2:
+            ultimos_roic = info_roic_form["valores"][:5]
+            roic5_auto = sum(ultimos_roic) / len(ultimos_roic)
+            origen_roic5 = f"LOS {len(ultimos_roic)} AÑOS MÁS RECIENTES DE TU FILA DE ROIC"
+        if roic5_auto is not None:
+            datos_actuales["roic_5y"]["valores"] = [roic5_auto]
+            datos_actuales["roic_5y"]["promedio"] = roic5_auto
+            st.caption(f"ROIC PROMEDIO 5 AÑOS CALCULADO CON {origen_roic5}: {roic5_auto:.1f}%")
+
+    st.markdown("---")
+    st.button("LIMPIAR FORMULARIO", icon=":material/restart_alt:", key=f"{p}btn_limpiar",
+              on_click=_limpiar_formulario_lp, args=(p,))
+
+    # --- Resumen de lo capturado ---
+    with st.expander("📋 Ver resumen de los datos capturados en el formulario actual"):
+        hay_datos = False
+        for info in datos_actuales.values():
+            if info["promedio"] is not None:
+                hay_datos = True
+                etiqueta = "promedio 5 años (dato único)" if info["es_promedio_5y"] else f"promedio de {len(info['valores'])} año(s)"
+                st.write(f"**{info['label']}:** {info['promedio']:.2f}  _( {etiqueta} )_")
+        if not hay_datos:
+            st.caption("Aún no has llenado ningún indicador.")
+
+    # --- VEREDICTO DEL MOTOR DE TRIBUNALES (SIN IA) ---
+    st.markdown("---")
+    col_vt, col_va = st.columns([3, 1])
+    with col_vt:
+        st.markdown("### :material/gavel: VEREDICTO DEL MOTOR")
+        st.caption("CALIFICACIÓN AUTOMÁTICA CON REGLAS FIJAS: MISMOS DATOS, MISMO RESULTADO. NO USA IA NI CONSUME TOKENS.")
+    with col_va:
+        modo_aprendizaje = st.toggle(
+            "MODO APRENDIZAJE",
+            key=f"{p}modo_aprendizaje",
+            help="MUESTRA LA EXPLICACIÓN COMPLETA DE CADA INDICADOR DEBAJO DE SU TARJETA.",
+        )
+    resultado_motor = evaluar_tribunales(datos_actuales, es_financiera)
+    if resultado_motor is None:
+        st.caption("LLENA LOS INDICADORES PARA VER EL VEREDICTO.")
+    else:
+        mostrar_veredicto_motor(resultado_motor, modo_aprendizaje)
+
+    nombre = ticker_lp.strip().upper()
+    return {
+        "nombre": nombre if nombre else f"EMPRESA {i + 1}",
+        "ticker": ticker_lp,
+        "datos": datos_actuales,
+        "es_financiera": es_financiera,
+        "resultado": resultado_motor,
+        "veredicto_txt": _resumen_veredicto_texto(resultado_motor),
+        "hay_datos": any(info["promedio"] is not None for info in datos_actuales.values()),
+    }
+
+
+def _ranking_motor(empresas):
+    """Ordena las empresas por categoría del motor y luego por puntaje (sin IA)."""
+    def _clave(e):
+        res = e["resultado"]
+        if res is None:
+            return (-1, -1)
+        return (ORDEN_CATEGORIAS.get(res["categoria"], 0), res["puntaje"])
+    return sorted(empresas, key=_clave, reverse=True)
+
+
+def _extraer_linea(texto, etiqueta):
+    """Busca una línea tipo 'ETIQUETA: valor' en la respuesta de la IA."""
+    match = re.search(rf'{etiqueta}:\s*(.+)', texto)
+    return match.group(1).strip().strip("*").strip() if match else None
 
 
 def mostrar_largo_plazo():
     st.title("💼 Análisis Fundamental - Inversión a Largo Plazo")
-    st.caption("Captura los indicadores fundamentales de una empresa, guárdalos, compara contra otras y pide un análisis con IA (incluyendo contexto cualitativo de noticias).")
-
-    # --- Estado de sesión ---
-    # --- Estado de sesión ---
-    if "lp_empresas_guardadas" not in st.session_state:
-        st.session_state["lp_empresas_guardadas"] = {}
+    st.caption("CAPTURA LOS INDICADORES DE HASTA 4 EMPRESAS, REVISA EL VEREDICTO DEL MOTOR Y PIDE A LA IA UN ANÁLISIS INDIVIDUAL O UNA COMPARACIÓN SEGÚN TU PERFIL DE INVERSIONISTA.")
 
     # ============================================================
     # DESCUBRIR OPORTUNIDADES DE INVERSIÓN (búsqueda cualitativa)
@@ -1509,174 +1680,114 @@ def mostrar_largo_plazo():
         st.caption("💡 Cuando encuentres una que te interese, escribe su ticker abajo en 'Ticker o Nombre de la Empresa' y llena sus indicadores para el análisis completo.")
 
     st.markdown("---")
-    ticker_lp = st.text_input("🏷️ Ticker o Nombre de la Empresa", key="lp_ticker_actual", placeholder="Ej: AAPL")
-    st.info("✏️ Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
 
-    datos_actuales = {}
-    for key, label in METRICAS_LP:
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            valor_input = st.text_input(label, key=f"lp_input_{key}", placeholder="Ej: 12 13 14")
-        with col2:
-            es_promedio_5y = st.checkbox("5Y", key=f"lp_chk_{key}", help="Marca si el dato ingresado ya es el promedio de los últimos 5 años")
+    # ============================================================
+    # EMPRESAS A ANALIZAR (HASTA 4 FORMULARIOS EN PESTAÑAS)
+    # ============================================================
+    if "lp_num_empresas" not in st.session_state:
+        st.session_state["lp_num_empresas"] = 1
+    n_emp = st.session_state["lp_num_empresas"]
 
-        valores, promedio = [], None
-        if valor_input.strip():
-            try:
-                # Acepta números con o sin % pegado, separados por espacio o tabulador
-                valores = _parsear_valores_porcentaje(valor_input)
-                if es_promedio_5y and len(valores) > 1:
-                    st.warning(f"⚠️ '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")
-                promedio = sum(valores) / len(valores)
-            except ValueError:
-                st.error(f"⚠️ Revisa el formato de '{label}': deben ser números separados por espacio. (Texto recibido: '{valor_input}')")
+    col_e1, col_e2, col_e3 = st.columns([2, 1, 1])
+    with col_e1:
+        st.markdown("#### :material/domain: EMPRESAS A ANALIZAR")
+        st.caption(f"{n_emp} DE {MAX_EMPRESAS_LP} FORMULARIOS. AGREGA HASTA {MAX_EMPRESAS_LP} EMPRESAS PARA QUE LA IA LAS COMPARE.")
+    with col_e2:
+        st.button("AGREGAR EMPRESA", icon=":material/add_business:", key="lp_btn_agregar", use_container_width=True,
+                  disabled=n_emp >= MAX_EMPRESAS_LP, on_click=_agregar_empresa_lp)
+    with col_e3:
+        st.button("QUITAR ÚLTIMA", icon=":material/remove:", key="lp_btn_quitar", use_container_width=True,
+                  disabled=n_emp <= 1, on_click=_quitar_empresa_lp)
 
-        datos_actuales[key] = {
-            "label": label,
-            "valores": valores,
-            "promedio": promedio,
-            "es_promedio_5y": es_promedio_5y,
-        }
+    tabs_emp = st.tabs([f"EMPRESA {i + 1}" for i in range(n_emp)])
+    empresas = []
+    for i, tab in enumerate(tabs_emp):
+        with tab:
+            empresas.append(_formulario_empresa(i))
 
-    # --- INDICADORES DEL MOTOR DE TRIBUNALES (NUEVO) ---
-    st.markdown("---")
-    st.markdown("#### :material/balance: INDICADORES DEL MOTOR DE TRIBUNALES")
-    st.caption("UN SOLO DATO POR INDICADOR (EL VALOR ACTUAL). LOS ENCUENTRAS EN INVESTINGPRO, MORNINGSTAR, GURUFOCUS O STOCKANALYSIS. SI FALTA ALGUNO, EL MOTOR LO MARCA COMO SIN DATO. PASA EL MOUSE POR EL ÍCONO DE AYUDA DE CADA CAMPO PARA VER QUÉ SIGNIFICA.")
-    with st.container(border=True):
-        cols_motor = st.columns(3)
-        for idx, (key, label, ejemplo) in enumerate(METRICAS_MOTOR):
-            with cols_motor[idx % 3]:
-                valor_m = st.text_input(label, key=f"lp_motor_{key}", placeholder=ejemplo, help=DEFINICIONES_MOTOR.get(key))
-            dato_m = None
-            if valor_m.strip():
-                try:
-                    dato_m = _parsear_dato_unico(valor_m)
-                except ValueError:
-                    st.error(f"REVISA EL FORMATO DE '{label}': DEBE SER UN SOLO NÚMERO. (TEXTO RECIBIDO: '{valor_m}')")
-            datos_actuales[key] = {
-                "label": label,
-                "valores": [dato_m] if dato_m is not None else [],
-                "promedio": dato_m,
-                "es_promedio_5y": False,
-                "dato_unico": True,
-            }
-        es_financiera = st.checkbox(
-            "ES BANCO, ASEGURADORA O UTILITY (EL MÉTODO NO APLICA)",
-            key="lp_motor_financiera",
-            help="EN BANCOS Y ASEGURADORAS LA DEUDA ES SU MATERIA PRIMA Y EN LAS UTILITIES LA GANANCIA ESTÁ REGULADA. EL MOTOR LAS MARCA COMO OMITIDAS PARA NO CALIFICARLAS MAL. VISA, MASTERCARD Y PAYPAL NO CUENTAN COMO BANCOS.",
-        )
+    empresas_con_datos = [e for e in empresas if e["hay_datos"]]
 
-    # Si no se capturó el precio, se toma de yfinance con el ticker
-    if datos_actuales["precio_actual"]["promedio"] is None and ticker_lp.strip():
-        precio_auto = _precio_yfinance(ticker_lp.strip().upper())
-        if precio_auto is not None:
-            datos_actuales["precio_actual"]["valores"] = [precio_auto]
-            datos_actuales["precio_actual"]["promedio"] = precio_auto
-            st.caption(f"PRECIO ACTUAL TOMADO DE YFINANCE: {precio_auto:,.2f} USD")
-
-    # Si no se capturó el ROIC de 5 años, se calcula con tu fila de ROIC (los 5 datos más recientes)
-    info_roic_form = datos_actuales.get("roic", {})
-    if datos_actuales["roic_5y"]["promedio"] is None and info_roic_form.get("valores"):
-        roic5_auto, origen_roic5 = None, ""
-        if info_roic_form.get("es_promedio_5y"):
-            roic5_auto = info_roic_form["promedio"]
-            origen_roic5 = "TU DATO DE ROIC MARCADO COMO 5Y"
-        elif len(info_roic_form["valores"]) >= 2:
-            ultimos_roic = info_roic_form["valores"][:5]
-            roic5_auto = sum(ultimos_roic) / len(ultimos_roic)
-            origen_roic5 = f"LOS {len(ultimos_roic)} AÑOS MÁS RECIENTES DE TU FILA DE ROIC"
-        if roic5_auto is not None:
-            datos_actuales["roic_5y"]["valores"] = [roic5_auto]
-            datos_actuales["roic_5y"]["promedio"] = roic5_auto
-            st.caption(f"ROIC PROMEDIO 5 AÑOS CALCULADO CON {origen_roic5}: {roic5_auto:.1f}%")
-
-    st.markdown("---")
-    col_g1, col_g2, col_g3 = st.columns(3)
-    with col_g1:
-        guardar = st.button("💾 Guardar Empresa", use_container_width=True)
-    with col_g2:
-        nueva = st.button("LIMPIAR FORMULARIO", icon=":material/restart_alt:", use_container_width=True, on_click=_limpiar_formulario_lp)
-    with col_g3:
-        borrar_todo = st.button("🗑️ Borrar Comparaciones", use_container_width=True)
-
-    if guardar:
-        if not ticker_lp.strip():
-            st.error("Escribe un ticker o nombre para identificar la empresa antes de guardar.")
-        else:
-            st.session_state["lp_empresas_guardadas"][ticker_lp.strip().upper()] = datos_actuales
-            st.session_state.setdefault("lp_financieras", {})[ticker_lp.strip().upper()] = es_financiera
-            st.success(f"✅ Datos de {ticker_lp.strip().upper()} guardados. Puedes limpiar el formulario y capturar otra empresa para comparar.")
-
-
-    if borrar_todo:
-        st.session_state["lp_empresas_guardadas"] = {}
-        st.success("Comparaciones borradas.")
-        st.rerun()
-
-    # --- Resumen de lo capturado actualmente ---
-    with st.expander("📋 Ver resumen de los datos capturados en el formulario actual"):
-        hay_datos = False
-        for info in datos_actuales.values():
-            if info["promedio"] is not None:
-                hay_datos = True
-                etiqueta = "promedio 5 años (dato único)" if info["es_promedio_5y"] else f"promedio de {len(info['valores'])} año(s)"
-                st.write(f"**{info['label']}:** {info['promedio']:.2f}  _( {etiqueta} )_")
-        if not hay_datos:
-            st.caption("Aún no has llenado ningún indicador.")
-
-    # --- Tabla comparativa de empresas guardadas ---
-    empresas_guardadas = st.session_state["lp_empresas_guardadas"]
-    if empresas_guardadas:
+    # --- COMPARACIÓN RÁPIDA DEL MOTOR (SIN IA) ---
+    if len(empresas_con_datos) >= 2:
         st.markdown("---")
-        st.subheader("📊 Comparación de Empresas Guardadas")
-
+        st.markdown("#### :material/leaderboard: COMPARACIÓN RÁPIDA DEL MOTOR")
+        st.caption("ORDENADAS POR CATEGORÍA Y PUNTAJE DEL MOTOR. ES UNA REFERENCIA NUMÉRICA; LA IA HACE LA COMPARACIÓN COMPLETA CON TU PERFIL.")
+        ranking = _ranking_motor(empresas_con_datos)
         tabla = {}
-        for emp, datos in empresas_guardadas.items():
-            tabla[emp] = {
-                info["label"]: (round(info["promedio"], 2) if info["promedio"] is not None else "-")
-                for info in datos.values()
+        for e in ranking:
+            res = e["resultado"]
+            fila = {
+                "CATEGORÍA DEL MOTOR": res["categoria"] if res else "SIN DATOS",
+                "PUNTAJE (DE 9)": res["puntaje"] if res else "-",
+                "CALIDAD": res["tribunales"]["CALIDAD"]["veredicto"] if res else "-",
+                "SALUD FINANCIERA": res["tribunales"]["SALUD"]["veredicto"] if res else "-",
+                "PRECIO": res["tribunales"]["PRECIO"]["veredicto"] if res else "-",
+                "ALERTAS": ", ".join(res["alertas"]) if (res and res["alertas"]) else "NINGUNA",
             }
-        for emp, datos in empresas_guardadas.items():
-            res_emp = evaluar_tribunales(datos, st.session_state.get("lp_financieras", {}).get(emp, False))
-            tabla[emp] = {"CATEGORÍA DEL MOTOR": res_emp["categoria"] if res_emp else "SIN DATOS", **tabla[emp]}
-        df_comparacion = pd.DataFrame(tabla).astype(str)
-        st.dataframe(df_comparacion, use_container_width=True)
+            for info in e["datos"].values():
+                fila[info["label"]] = round(info["promedio"], 2) if info["promedio"] is not None else "-"
+            tabla[e["nombre"]] = fila
+        st.dataframe(pd.DataFrame(tabla).astype(str), use_container_width=True)
 
-    # --- VEREDICTO DEL MOTOR DE TRIBUNALES (NUEVO, SIN IA) ---
+    # ============================================================
+    # PERFIL DE INVERSIONISTA
+    # ============================================================
     st.markdown("---")
-    col_vt, col_va = st.columns([3, 1])
-    with col_vt:
-        st.markdown("### :material/gavel: VEREDICTO DEL MOTOR")
-        st.caption("CALIFICACIÓN AUTOMÁTICA CON REGLAS FIJAS: MISMOS DATOS, MISMO RESULTADO. NO USA IA NI CONSUME TOKENS.")
-    with col_va:
-        modo_aprendizaje = st.toggle(
-            "MODO APRENDIZAJE",
-            key="lp_modo_aprendizaje",
-            help="MUESTRA LA EXPLICACIÓN COMPLETA DE CADA INDICADOR DEBAJO DE SU TARJETA.",
-        )
-    resultado_motor = evaluar_tribunales(datos_actuales, es_financiera)
-    if resultado_motor is None:
-        st.caption("LLENA LOS INDICADORES PARA VER EL VEREDICTO.")
-    else:
-        mostrar_veredicto_motor(resultado_motor, modo_aprendizaje)
-    veredicto_txt = _resumen_veredicto_texto(resultado_motor)
+    st.markdown("#### :material/person: PERFIL DE INVERSIONISTA")
+    st.caption("LA IA LO USA PARA DECIRTE QUÉ EMPRESA ENCAJA MEJOR CONTIGO, Y TAMBIÉN SI ALGUNA ES OBJETIVAMENTE MEJOR SIN IMPORTAR EL PERFIL.")
+    with st.container(border=True):
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            perfil_riesgo = st.radio(
+                "TOLERANCIA AL RIESGO", ["CONSERVADOR", "MODERADO", "AGRESIVO"], index=1, key="lp_perfil_riesgo",
+                help=" | ".join(f"{k}: {PERFIL_AYUDA[k]}" for k in ("CONSERVADOR", "MODERADO", "AGRESIVO")),
+            )
+        with col_p2:
+            perfil_objetivo = st.radio(
+                "OBJETIVO PRINCIPAL", ["CRECIMIENTO", "DIVIDENDOS / INGRESO", "VALOR (COMPRAR BARATO)", "EQUILIBRADO"],
+                index=3, key="lp_perfil_objetivo",
+                help=" | ".join(f"{k}: {PERFIL_AYUDA[k]}" for k in ("CRECIMIENTO", "DIVIDENDOS / INGRESO", "VALOR (COMPRAR BARATO)", "EQUILIBRADO")),
+            )
+        with col_p3:
+            perfil_horizonte = st.radio(
+                "HORIZONTE DE INVERSIÓN", ["3 A 5 AÑOS", "5 A 10 AÑOS", "MÁS DE 10 AÑOS"], index=1, key="lp_perfil_horizonte",
+                help="CUÁNTO TIEMPO PIENSAS MANTENER LA INVERSIÓN. A MAYOR HORIZONTE, MÁS PESA LA CALIDAD DEL NEGOCIO Y MENOS LA VOLATILIDAD DE CORTO PLAZO.",
+            )
+        st.caption(f"{perfil_riesgo}: {PERFIL_AYUDA[perfil_riesgo]}  ·  {perfil_objetivo}: {PERFIL_AYUDA[perfil_objetivo]}")
+    perfil_txt = (
+        f"- Tolerancia al riesgo: {perfil_riesgo} ({PERFIL_AYUDA[perfil_riesgo]})\n"
+        f"- Objetivo principal: {perfil_objetivo} ({PERFIL_AYUDA[perfil_objetivo]})\n"
+        f"- Horizonte de inversión: {perfil_horizonte}"
+    )
 
     # --- Análisis con IA ---
     st.markdown("---")
     st.subheader("🤖 Análisis con IA")
 
-    opciones_analisis = ["Empresa actual (sin guardar)"]
-    if len(empresas_guardadas) >= 2:
-        opciones_analisis.append("Comparar empresas guardadas")
+    opciones_analisis = ["ANÁLISIS INDIVIDUAL"]
+    if len(empresas_con_datos) >= 2:
+        opciones_analisis.append(f"COMPARAR LAS {len(empresas_con_datos)} EMPRESAS")
 
-    modo_analisis = st.radio("¿Qué quieres analizar?", opciones_analisis, horizontal=True)
+    modo_analisis = st.radio("¿QUÉ QUIERES ANALIZAR?", opciones_analisis, horizontal=True, key="lp_modo_analisis")
+    if len(empresas_con_datos) < 2 and n_emp >= 2:
+        st.caption("PARA COMPARAR, LLENA AL MENOS UN INDICADOR EN DOS O MÁS PESTAÑAS.")
+
+    idx_sel = 0
+    if modo_analisis == "ANÁLISIS INDIVIDUAL" and n_emp > 1:
+        idx_sel = st.selectbox("¿CUÁL EMPRESA?", list(range(n_emp)), format_func=lambda k: f"EMPRESA {k + 1}: {empresas[k]['nombre']}",
+                               key="lp_sel_individual")
+    empresa_sel = empresas[idx_sel]
+    ticker_lp = empresa_sel["ticker"]
+    datos_actuales = empresa_sel["datos"]
+    veredicto_txt = empresa_sel["veredicto_txt"]
+
     incluir_cualitativo = st.checkbox("🌐 Incluir análisis cualitativo (buscar noticias e info reciente de la empresa)", value=True)
 
     if st.button("🔍 Generar Análisis"):
         if not model:
             st.error("IA no configurada.")
 
-        elif modo_analisis == "Empresa actual (sin guardar)":
+        elif modo_analisis == "ANÁLISIS INDIVIDUAL":
             nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa analizada"
             resumen = _resumen_metricas_texto(nombre_emp, datos_actuales)
             hay_datos_cuant = any(info["promedio"] is not None for info in datos_actuales.values())
@@ -1873,6 +1984,10 @@ def mostrar_largo_plazo():
                     Menciona en una frase la categoría del motor y si el análisis cualitativo la confirma o la pone en duda.
                     Recuerda que ninguna categoría es una orden de compra: DEEP DIVE significa investigar a fondo.
 
+                    PERFIL DEL INVERSIONISTA:
+                    {perfil_txt}
+                    Indica en una o dos frases si {nombre_emp} encaja con este perfil y por qué.
+
                     Después de tu conclusión, en su propia línea y SIN NADA MÁS en esa línea, escribe exactamente:
                     CALIFICACIÓN_PROMEDIO: {promedio_general if promedio_general is not None else "X"}/10
                     """
@@ -1888,72 +2003,112 @@ def mostrar_largo_plazo():
                             st.error(f"Error generando la conclusión general: {e}")
 
         else:
-            # --- Modo: Comparar empresas guardadas (análisis cuantitativo comparativo) ---
+            # --- Modo: Comparar las empresas de las pestañas (hasta 4) ---
+            ranking = _ranking_motor(empresas_con_datos)
+            ranking_txt = "\n".join(
+                f"{pos}. {e['nombre']}: {e['resultado']['categoria']} (puntaje {e['resultado']['puntaje']}/9)" if e["resultado"]
+                else f"{pos}. {e['nombre']}: sin datos suficientes para el motor"
+                for pos, e in enumerate(ranking, start=1)
+            )
             bloques = [
-                _resumen_metricas_texto(emp, datos) + "\n" + _resumen_veredicto_texto(
-                    evaluar_tribunales(datos, st.session_state.get("lp_financieras", {}).get(emp, False)))
-                for emp, datos in empresas_guardadas.items()
+                f"=== {e['nombre']} ===\n" + _resumen_metricas_texto(e["nombre"], e["datos"]) + "\n" + e["veredicto_txt"]
+                for e in empresas_con_datos
             ]
             resumen_total = "\n\n".join(bloques)
+            nombres_txt = ", ".join(e["nombre"] for e in empresas_con_datos)
             instruccion_busqueda = (
                 "Usa Google Search para investigar noticias recientes (últimos 3-6 meses), posición competitiva, "
                 "riesgos, ventajas competitivas (moat) y catalizadores relevantes de cada empresa. "
-                "Incluye una sección de '🌐 Contexto Cualitativo' con lo que encuentres para cada una."
+                "Incluye una sección de 'CONTEXTO CUALITATIVO' con lo que encuentres para cada una."
             ) if incluir_cualitativo else ""
 
             prompt = f"""
             Actúa como un analista financiero experto en inversión fundamental a largo plazo (estilo value/growth investing).
-            Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso.
+            Habla en español, con lenguaje claro y sencillo, sin dejar de ser técnicamente riguroso. No uses emojis.
 
-            Compara las siguientes empresas con base en sus datos fundamentales:
+            PERFIL DEL INVERSIONISTA:
+            {perfil_txt}
+
+            EMPRESAS A COMPARAR ({len(empresas_con_datos)}): {nombres_txt}
 
             {resumen_total}
 
+            RANKING DEL MOTOR DE REGLAS FIJAS (calculado sin IA, de mejor a peor):
+            {ranking_txt}
+
             {instruccion_busqueda}
 
-            TAREA: Compara rentabilidad, salud financiera, valuación y generación de caja entre todas las empresas.
-            Evalúa también si los márgenes de cada una son consistentes en el tiempo o volátiles, usando los
-            datos por año que vienen entre paréntesis junto a cada indicador.
-            Cada empresa trae su VEREDICTO DEL MOTOR (categoría, tribunales y alertas): úsalo en la comparación y
-            explica en lenguaje sencillo qué significan sus indicadores (Piotroski, Altman Z, Beneish M, EV/EBIT,
-            FCF Yield, upside). Si tu veredicto final difiere del motor, explica por qué.
+            TAREA:
+            1. Compara rentabilidad, salud financiera, valuación, crecimiento y generación de caja entre todas las empresas.
+               Evalúa si los márgenes de cada una son consistentes o volátiles, usando los datos por año entre paréntesis.
+            2. Usa el VEREDICTO DEL MOTOR de cada empresa y explica en lenguaje sencillo qué significan sus indicadores
+               clave (Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield, upside). Si tu conclusión difiere del ranking
+               del motor, explica claramente por qué con base en los datos.
+            3. Arma una TABLA COMPARATIVA en formato markdown: una fila por criterio (Calidad del negocio, Salud financiera,
+               Precio / valuación, Crecimiento, Generación de caja, Riesgo, Categoría del motor) y una columna por empresa.
+               En cada celda pon una evaluación corta y marca con la palabra GANA la mejor empresa de cada criterio.
+            4. MEJOR OBJETIVAMENTE: indica si alguna empresa es superior a las demás en la mayoría de los criterios,
+               sin importar el perfil. Si ninguna es claramente superior, dilo y explica por qué.
+            5. MEJOR PARA EL PERFIL: según la tolerancia al riesgo, el objetivo y el horizonte del inversionista,
+               indica qué empresa encaja mejor y por qué, y cuál encaja peor y por qué.
+            6. Indica si la mejor objetiva y la mejor para el perfil coinciden. Si no coinciden, explica la diferencia
+               en lenguaje sencillo (por ejemplo: una es mejor negocio pero es demasiado riesgosa para un perfil conservador).
 
-            Termina SIEMPRE con una sección '🏆 VEREDICTO' indicando cuál es la mejor opción de inversión a largo plazo
-            entre las analizadas, y por qué, en lenguaje sencillo.
+            Termina SIEMPRE con una sección 'VEREDICTO FINAL' de máximo 5 líneas, en lenguaje sencillo.
+            Recuerda que es un análisis educativo: ninguna conclusión es una orden de compra o venta.
+
+            Después, escribe estas dos líneas exactas, cada una en su propia línea y SIN NADA MÁS en esa línea:
+            MEJOR_OBJETIVA: <nombre exacto de una de estas empresas: {nombres_txt}, o NINGUNA CLARAMENTE SUPERIOR>
+            MEJOR_PARA_PERFIL: <nombre exacto de una de estas empresas: {nombres_txt}>
             """
+
+            def _mostrar_comparacion(texto):
+                st.markdown(texto)
+                mejor_obj = _extraer_linea(texto, "MEJOR_OBJETIVA")
+                mejor_perfil = _extraer_linea(texto, "MEJOR_PARA_PERFIL")
+                if mejor_obj or mejor_perfil:
+                    st.markdown("---")
+                    col_r1, col_r2 = st.columns(2)
+                    with col_r1:
+                        st.metric("MEJOR OBJETIVAMENTE", (mejor_obj or "N/D").upper())
+                    with col_r2:
+                        st.metric(f"MEJOR PARA TU PERFIL ({perfil_riesgo})", (mejor_perfil or "N/D").upper())
+                    st.caption("HERRAMIENTA EDUCATIVA: NINGUNA CONCLUSIÓN ES UNA ORDEN DE COMPRA O VENTA.")
 
             with st.spinner("Analizando y comparando empresas..."):
                 try:
                     response = model.generate_content(prompt)
-                    st.markdown(response.text)
+                    _mostrar_comparacion(response.text)
                 except Exception as e:
                     if "429" in str(e) or "quota" in str(e).lower():
                         st.warning("⚠️ Cuota excedida en la búsqueda. Generando análisis solo con los datos numéricos.")
                         try:
-                            prompt_sin_busqueda = prompt.replace(instruccion_busqueda, "")
+                            prompt_sin_busqueda = prompt.replace(instruccion_busqueda, "") if instruccion_busqueda else prompt
                             response = model.generate_content(prompt_sin_busqueda)
-                            st.markdown(response.text)
+                            _mostrar_comparacion(response.text)
                         except Exception as e2:
                             st.error(f"Error: {e2}")
                     else:
                         st.error(f"Error generando el análisis: {e}")
 
-    # --- Chat libre sobre la empresa / comparación ---
+    # --- Chat libre sobre las empresas ---
     st.markdown("---")
     with st.container():
         st.subheader("💬 Pregúntale al Analista")
-        duda_lp = st.chat_input("Pregunta algo sobre esta empresa o comparación...")
+        duda_lp = st.chat_input("Pregunta algo sobre estas empresas o la comparación...")
         if duda_lp:
-            nombre_emp = ticker_lp.strip().upper() if ticker_lp.strip() else "la empresa actual"
+            bloques_chat = [
+                f"=== {e['nombre']} ===\n" + _resumen_metricas_texto(e["nombre"], e["datos"]) + "\n" + e["veredicto_txt"]
+                for e in empresas_con_datos
+            ] or ["Aún no hay datos capturados."]
             contexto_chat = f"""
             Eres un analista financiero fundamental. Habla en español, con lenguaje claro y sencillo.
 
-            DATOS DE LA EMPRESA EN EL FORMULARIO ({nombre_emp}):
-            {_resumen_metricas_texto(nombre_emp, datos_actuales)}
+            PERFIL DEL INVERSIONISTA:
+            {perfil_txt}
 
-            {veredicto_txt}
-
-            EMPRESAS GUARDADAS PARA COMPARAR: {", ".join(empresas_guardadas.keys()) if empresas_guardadas else "Ninguna guardada aún"}
+            EMPRESAS CAPTURADAS EN LOS FORMULARIOS:
+            {chr(10).join(bloques_chat)}
 
             PREGUNTA DEL USUARIO: {duda_lp}
 

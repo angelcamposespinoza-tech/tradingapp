@@ -1432,6 +1432,17 @@ MENOR_ES_MEJOR = {"debt_equity", "pe_ratio", "ps_ratio", "pe_cash_flow_ratio", "
 
 ORDEN_DATOS_OPCIONES = ["MÁS RECIENTE PRIMERO", "MÁS ANTIGUO PRIMERO"]
 
+AYUDA_ORDEN = ("REVISA EL ENCABEZADO DE LA TABLA DE DONDE COPIAS: SI EL AÑO MÁS NUEVO ESTÁ A LA IZQUIERDA, ELIGE "
+               "'MÁS RECIENTE PRIMERO'; SI ESTÁ A LA DERECHA (COMO EN MUCHOS ESTADOS FINANCIEROS), ELIGE 'MÁS ANTIGUO PRIMERO'. "
+               "LA APP LOS ACOMODA SOLA.")
+
+
+def _aplicar_orden_a_todos(p):
+    """Al cambiar el orden general, se copia a todos los indicadores de ese formulario (cada uno se puede ajustar después)."""
+    valor = st.session_state.get(f"{p}orden_datos", ORDEN_DATOS_OPCIONES[0])
+    for key, _ in METRICAS_LP:
+        st.session_state[f"{p}orden_{key}"] = valor
+
 
 def _calcular_tendencia(key, valores):
     """Compara los años recientes contra los antiguos. 'valores' va del más reciente al más antiguo.
@@ -1515,19 +1526,24 @@ def _formulario_empresa(i):
     with col_t1:
         ticker_lp = st.text_input("TICKER O NOMBRE DE LA EMPRESA", key=f"{p}ticker_actual", placeholder="EJ: AAPL")
     with col_t2:
-        orden_datos = st.radio(
-            "ORDEN DE LOS DATOS QUE PEGAS", ORDEN_DATOS_OPCIONES, key=f"{p}orden_datos", horizontal=True,
-            help="REVISA EL ENCABEZADO DE LA TABLA DE DONDE COPIAS: SI EL AÑO MÁS NUEVO ESTÁ A LA IZQUIERDA, ELIGE 'MÁS RECIENTE PRIMERO'; "
-                 "SI ESTÁ A LA DERECHA (COMO EN MUCHOS ESTADOS FINANCIEROS), ELIGE 'MÁS ANTIGUO PRIMERO'. LA APP LOS ACOMODA SOLA.",
+        st.radio(
+            "ORDEN GENERAL (SE APLICA A TODOS LOS INDICADORES)", ORDEN_DATOS_OPCIONES, key=f"{p}orden_datos", horizontal=True,
+            on_change=_aplicar_orden_a_todos, args=(p,),
+            help=AYUDA_ORDEN + " AL CAMBIARLO AQUÍ, SE CAMBIA EN TODOS LOS INDICADORES; DESPUÉS PUEDES AJUSTAR CADA UNO POR SEPARADO.",
         )
-    st.info(":material/edit: Elige arriba el ORDEN DE LOS DATOS según la tabla de donde copias. Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
+    st.info(":material/edit: Junto a cada indicador puedes elegir su ORDEN (más reciente o más antiguo primero) según la tabla de donde lo copias; el orden general de arriba los cambia todos de golpe. Ingresa los valores de cada indicador separados por un simple espacio (Ej: '12 13 14' para 3 años, se calculará el promedio automáticamente). Si solo tienes el promedio de los últimos 5 años ya calculado, marca la casilla '5Y' e ingresa un único dato.")
 
     datos_actuales = {}
     for key, label in METRICAS_LP:
-        col1, col2 = st.columns([4, 1])
+        col1, col_ord, col2 = st.columns([3.2, 1.4, 0.6])
         with col1:
             valor_input = st.text_input(label, key=f"{p}input_{key}", placeholder="Ej: 12 13 14")
+        with col_ord:
+            if f"{p}orden_{key}" not in st.session_state:
+                st.session_state[f"{p}orden_{key}"] = st.session_state.get(f"{p}orden_datos", ORDEN_DATOS_OPCIONES[0])
+            orden_campo = st.selectbox("ORDEN", ORDEN_DATOS_OPCIONES, key=f"{p}orden_{key}", help=AYUDA_ORDEN)
         with col2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
             es_promedio_5y = st.checkbox("5Y", key=f"{p}chk_{key}", help="Marca si el dato ingresado ya es el promedio de los últimos 5 años")
 
         valores, promedio = [], None
@@ -1535,7 +1551,7 @@ def _formulario_empresa(i):
             try:
                 # Acepta números con o sin % pegado, separados por espacio o tabulador
                 valores = _parsear_valores_porcentaje(valor_input)
-                if orden_datos == "MÁS ANTIGUO PRIMERO":
+                if orden_campo == "MÁS ANTIGUO PRIMERO":
                     valores = valores[::-1]  # internamente siempre: más reciente primero
                 if es_promedio_5y and len(valores) > 1:
                     st.warning(f":material/warning: '{label}' está marcado como promedio de 5 años, pero ingresaste varios datos. Se usará el promedio de todos ellos igualmente.")

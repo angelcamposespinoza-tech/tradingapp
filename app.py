@@ -861,7 +861,9 @@ def _resumen_metricas_texto(nombre_empresa, datos):
     for info in datos.values():
         if info["promedio"] is None:
             continue
-        if info["es_promedio_5y"]:
+        if info.get("dato_unico"):
+            etiqueta_extra = " (dato actual)"
+        elif info["es_promedio_5y"]:
             etiqueta_extra = " (dato único / promedio de 5 años)"
         else:
             valores_txt = ", ".join(f"{v:.2f}" for v in info["valores"])
@@ -879,6 +881,512 @@ def _extraer_calificacion(texto, etiqueta):
         except ValueError:
             return None
     return None
+
+
+# ============================================================
+# MOTOR DE TRES TRIBUNALES: CALIDAD -> SALUD FINANCIERA -> PRECIO
+# Reglas fijas basadas en el método de la skill AAI. No usa IA ni tokens.
+# ============================================================
+
+# Indicadores nuevos que necesita el motor (un solo dato: el valor actual)
+METRICAS_MOTOR = [
+    ("precio_actual", "PRECIO ACTUAL ($)", "EJ: 185.50  (VACÍO = SE TOMA DE YFINANCE)"),
+    ("fair_value", "FAIR VALUE ($)", "EJ: 210"),
+    ("ev_ebit", "EV / EBIT", "EJ: 14.2"),
+    ("fcf_yield", "FCF YIELD (%)", "EJ: 3.8"),
+    ("roic_5y", "ROIC PROMEDIO 5 AÑOS (%)", "EJ: 24.5"),
+    ("eps_growth_5y", "CRECIMIENTO EPS PROMEDIO 5 AÑOS (%)", "EJ: 12"),
+    ("rev_cagr_5y", "CRECIMIENTO INGRESOS 5 AÑOS - CAGR (%)", "EJ: 9.5"),
+    ("buyback_yield", "BUYBACK YIELD (%)", "EJ: 2.1  (NEGATIVO SI EMITE ACCIONES)"),
+    ("piotroski", "PIOTROSKI SCORE (0 A 9)", "EJ: 7"),
+    ("altman_z", "ALTMAN Z-SCORE", "EJ: 4.3"),
+    ("beneish_m", "BENEISH M-SCORE", "EJ: -2.4"),
+]
+
+# Explicación sencilla de cada indicador (se usa en el ícono de info y en el modo aprendizaje)
+DEFINICIONES_MOTOR = {
+    "roic": "CUÁNTO GANA LA EMPRESA POR CADA 100 QUE INVIERTE EN SU NEGOCIO. CON 20%, CADA 100 INVERTIDOS LE DEJAN 20 AL AÑO. META: 20% O MÁS.",
+    "roic_5y": "EL MISMO ROIC PERO PROMEDIADO EN 5 AÑOS. SIRVE PARA DESCARTAR QUE UN SOLO BUEN AÑO INFLE EL RESULTADO. META: 20% O MÁS.",
+    "roe": "CUÁNTO GANA POR CADA 100 QUE PUSIERON LOS ACCIONISTAS. META: 15% O MÁS SIN DEUDA ALTA, PORQUE LA DEUDA PUEDE INFLAR ESTE NÚMERO.",
+    "deuda_capital": "QUÉ PARTE DE LA EMPRESA ESTÁ FINANCIADA CON PRÉSTAMOS. SE CALCULA SOLO A PARTIR DE TU DEBT TO EQUITY. MÁS DE 60% ES MUCHA DEUDA.",
+    "gross_margin": "DE CADA 100 QUE VENDE, CUÁNTO LE QUEDA DESPUÉS DE PAGAR LO QUE CUESTA PRODUCIRLO. 40% O MÁS SUELE INDICAR ALGO DIFÍCIL DE COPIAR.",
+    "fcf_net_income": "SI LAS GANANCIAS QUE REPORTA SE CONVIERTEN EN EFECTIVO REAL. 0.8 O MÁS SIGNIFICA QUE AL MENOS 80% DE LA GANANCIA ES DINERO EN CAJA.",
+    "eps_growth_5y": "CUÁNTO HA CRECIDO LA GANANCIA POR ACCIÓN, EN PROMEDIO, EN LOS ÚLTIMOS 5 AÑOS. POSITIVO = GANA MÁS QUE ANTES.",
+    "rev_cagr_5y": "CUÁNTO HAN CRECIDO LAS VENTAS POR AÑO, EN PROMEDIO, EN LOS ÚLTIMOS 5 AÑOS. POSITIVO = VENDE MÁS QUE ANTES.",
+    "buyback_yield": "SI LA EMPRESA RECOMPRA SUS ACCIONES (POSITIVO) O EMITE NUEVAS (NEGATIVO). AL RECOMPRAR, TU PEDAZO DE LA EMPRESA CRECE; AL EMITIR, SE DILUYE.",
+    "piotroski": "LISTA DE 9 PREGUNTAS DE SÍ O NO SOBRE SI EL NEGOCIO MEJORÓ RESPECTO AL AÑO ANTERIOR: SI GANA MÁS, SI DEBE MENOS, SI ES MÁS EFICIENTE. 7 O MÁS ES BUENA SEÑAL; 3 O MENOS INDICA DETERIORO.",
+    "altman_z": "TERMÓMETRO DEL RIESGO DE QUIEBRA. ARRIBA DE 3 = ZONA SEGURA; ENTRE 1.81 Y 3 = ZONA GRIS; ABAJO DE 1.81 = ZONA DE PELIGRO.",
+    "beneish_m": "DETECTOR DE MAQUILLAJE CONTABLE: BUSCA PATRONES TÍPICOS DE EMPRESAS QUE INFLAN SUS NÚMEROS. -1.78 O MENOS = SIN ALERTA; ARRIBA DE ESO, REVISAR CON CUIDADO.",
+    "upside": "DIFERENCIA ENTRE EL FAIR VALUE (VALOR ESTIMADO) Y EL PRECIO ACTUAL. +20% SIGNIFICA QUE EL VALOR ESTIMADO ESTÁ 20% ARRIBA DEL PRECIO DE HOY.",
+    "ev_ebit": "CUÁNTOS AÑOS DE GANANCIA OPERATIVA COSTARÍA COMPRAR LA EMPRESA COMPLETA, INCLUIDA SU DEUDA. 10 O MENOS = BARATA; 20 O MÁS = CARA; NEGATIVO = PIERDE DINERO OPERANDO.",
+    "fcf_yield": "CUÁNTO EFECTIVO LIBRE GENERA LA EMPRESA POR CADA 100 QUE PAGAS POR SUS ACCIONES. 4% O MÁS = ATRACTIVO; 2% O MENOS = CARO.",
+    "precio_actual": "PRECIO AL QUE COTIZA HOY LA ACCIÓN. SI LO DEJAS VACÍO, LA APP LO BUSCA EN YFINANCE CON EL TICKER.",
+    "fair_value": "VALOR JUSTO ESTIMADO DE LA ACCIÓN SEGÚN MODELOS O ANALISTAS (INVESTINGPRO, MORNINGSTAR, ETC.). SE COMPARA CONTRA EL PRECIO ACTUAL.",
+}
+
+TRIBUNALES_INFO = {
+    "CALIDAD": {
+        "titulo": "TRIBUNAL DE CALIDAD",
+        "definicion": "MIDE SI ES UN BUEN NEGOCIO CON 3 PRUEBAS: GREENBLATT (ROIC ALTO HOY Y A 5 AÑOS), MSCI (ROE ALTO SIN DEPENDER DE DEUDA) Y AQR (RENTABLE, CRECE, SEGURA Y NO DILUYE). ES LA PUERTA: SIN CALIDAD EXCELENTE NO LLEGA A DEEP DIVE NI A WATCHLIST.",
+        "frases": {
+            "EXCELENTE": ("NEGOCIO DE ALTA CALIDAD: PASA LAS 3 PRUEBAS", "ok"),
+            "BUENA": ("BUEN NEGOCIO, PERO NO EXCEPCIONAL: PASA 2 DE 3 PRUEBAS", "warn"),
+            "DÉBIL": ("NEGOCIO DÉBIL SEGÚN SUS NÚMEROS", "bad"),
+        },
+    },
+    "SALUD": {
+        "titulo": "TRIBUNAL DE SALUD FINANCIERA",
+        "definicion": "REVISA SI LA EMPRESA ESTÁ SANA CON 3 SEÑALES: PIOTROSKI 7 O MÁS, ALTMAN Z 3 O MÁS Y BENEISH SIN ALERTA. ES EL CINTURÓN DE SEGURIDAD: SI SALE DÉBIL, BLOQUEA DEEP DIVE Y WATCHLIST.",
+        "frases": {
+            "EXCELENTE": ("FINANZAS SANAS EN LAS 3 SEÑALES", "ok"),
+            "MIXTA": ("FINANZAS ACEPTABLES CON ALGÚN PUNTO A VIGILAR", "warn"),
+            "DÉBIL": ("FINANZAS CON SEÑALES DE RIESGO", "bad"),
+        },
+    },
+    "PRECIO": {
+        "titulo": "TRIBUNAL DE PRECIO",
+        "definicion": "COMPARA SEÑALES A FAVOR (EV/EBIT 10 O MENOS, UPSIDE 20% O MÁS, FCF YIELD 4% O MÁS) CONTRA SEÑALES EN CONTRA (UPSIDE -10% O MENOS, EV/EBIT 20 O MÁS O NEGATIVO, FCF YIELD 2% O MENOS). DECIDE ENTRE DEEP DIVE Y WATCHLIST.",
+        "frases": {
+            "MUY BARATA": ("TODAS LAS SEÑALES DICEN QUE ESTÁ BARATA", "ok"),
+            "BARATA": ("LA MAYORÍA DE LAS SEÑALES DICEN QUE ESTÁ BARATA", "ok"),
+            "MIXTA": ("PRECIO SIN UNA SEÑAL CLARA", "warn"),
+            "CARA": ("VARIAS SEÑALES DICEN QUE ESTÁ CARA", "bad"),
+        },
+    },
+}
+
+CATEGORIAS_INFO = {
+    "DEEP DIVE": ("#3fb950", "BUEN NEGOCIO, SANO Y A BUEN PRECIO: VALE LA PENA INVESTIGARLA A FONDO",
+                  "NO SIGNIFICA COMPRAR. SIGNIFICA QUE LOS NÚMEROS PASAN LOS 3 TRIBUNALES Y AHORA TOCA LA MITAD CUALITATIVA: NEGOCIO, VENTAJA COMPETITIVA, DIRECTIVOS Y RIESGOS."),
+    "WATCHLIST": ("#58a6ff", "BUEN NEGOCIO Y SANO, PERO HOY NO ESTÁ BARATA: AL RADAR ESPERANDO MEJOR PRECIO",
+                  "PASA CALIDAD Y SALUD, PERO EL TRIBUNAL DE PRECIO NO LA VE BARATA. SE MONITOREA HASTA QUE EL PRECIO SEA ATRACTIVO."),
+    "NEUTRAL": ("#d29922", "NI EXCELENTE NI MALA: HOY NO ES CANDIDATA",
+                "PUEDE SER UNA BUENA EMPRESA SIN LLEGAR A EXCELENTE, O UNA EXCELENTE CON SALUD DÉBIL. PUEDE SUBIR DE CATEGORÍA SI SU CALIDAD O SALUD MEJORAN."),
+    "DESCARTADA": ("#f85149", "HOY NO PASA LOS FILTROS DE CALIDAD",
+                   "NO ES UN PRONÓSTICO: UNA DESCARTADA PUEDE SUBIR DE PRECIO. SOLO SIGNIFICA QUE, CON ESTE MÉTODO Y LOS DATOS DE HOY, NO ES INTERESANTE."),
+    "OMITIDA POR MÉTODO": ("#8b949e", "BANCO, ASEGURADORA O UTILITY: ESTE MÉTODO NO LAS MIDE BIEN",
+                           "EN LOS BANCOS LA DEUDA ES SU MATERIA PRIMA (LOS DEPÓSITOS SON PASIVO) Y EN LAS UTILITIES LA GANANCIA ESTÁ REGULADA. MODELOS COMO ALTMAN O ROIC LAS CASTIGARÍAN INJUSTAMENTE. LOS INDICADORES SE MUESTRAN SOLO COMO REFERENCIA."),
+}
+
+ALERTAS_INFO = {
+    "POSIBLE TRAMPA DE VALOR": "SE VE BARATA PERO EL NEGOCIO ES DÉBIL. CASI SIEMPRE LO BARATO TIENE UNA RAZÓN.",
+    "¿DEMASIADO BARATA?": "ES EXCELENTE Y SE VE MUY BARATA. REVISA QUÉ SABE EL MERCADO QUE TÚ NO: PUEDE HABER UN PROBLEMA QUE LOS NÚMEROS AÚN NO MUESTRAN.",
+    "M-SCORE": "EL DETECTOR DE MAQUILLAJE CONTABLE ENCENDIÓ LA ALERTA. REVISA SUS REPORTES CON CUIDADO.",
+    "MEJORA DÉBIL": "ES EXCELENTE PERO SU PIOTROSKI ES 3 O MENOS: EL NEGOCIO SE ESTÁ DETERIORANDO RESPECTO AL AÑO ANTERIOR.",
+    "ALTMAN ZONA DE RIESGO": "ALTMAN Z MENOR A 1.81: ZONA DE PELIGRO FINANCIERO.",
+    "EXCELENTE PERO SALUD DÉBIL": "PASÓ LA PRUEBA DE CALIDAD PERO REPROBÓ LA DE SALUD: EL CINTURÓN DE SEGURIDAD LA FRENÓ.",
+    "DATOS INSUFICIENTES": "FALTAN 5 O MÁS INDICADORES CLAVE: SE DESCARTA POR FALTA DE INFORMACIÓN, NO POR SER MALA.",
+}
+
+ESTADOS_INFO = {
+    "ok": ("A FAVOR", "#3fb950", "rgba(63,185,80,.15)"),
+    "warn": ("PRECAUCIÓN", "#d29922", "rgba(210,153,34,.15)"),
+    "bad": ("EN CONTRA", "#f85149", "rgba(248,81,73,.15)"),
+    "nd": ("SIN DATO", "#8b949e", "rgba(139,148,158,.15)"),
+}
+
+
+def _parsear_dato_unico(texto):
+    """Toma el primer número del texto. Acepta coma decimal, signo menos y símbolos como % o $."""
+    texto = texto.replace("−", "-").replace(",", ".")
+    tokens = re.findall(r'-?\d+(?:\.\d+)?', texto)
+    if not tokens:
+        raise ValueError("sin número")
+    return float(tokens[0])
+
+
+@st.cache_data(ttl=600)
+def _precio_yfinance(ticker):
+    """Precio actual desde yfinance. Si falla, regresa None."""
+    try:
+        p = getattr(yf.Ticker(ticker).fast_info, "last_price", None)
+        return float(p) if p else None
+    except Exception:
+        return None
+
+
+def _dato(datos, key):
+    info = datos.get(key)
+    return info.get("promedio") if info else None
+
+
+def _fila_indicador(key, nombre, valor, texto_valor, estado, frase):
+    if valor is None:
+        return {"key": key, "nombre": nombre, "valor": "N/D", "estado": "nd",
+                "frase": "NO CAPTURADO: NO SE PUEDE EVALUAR"}
+    return {"key": key, "nombre": nombre, "valor": texto_valor, "estado": estado, "frase": frase}
+
+
+def evaluar_tribunales(datos, es_financiera=False):
+    """Aplica los 3 tribunales con reglas fijas. Regresa None si no hay ningún dato."""
+    roic = _dato(datos, "roic")
+    roic5 = _dato(datos, "roic_5y")
+    roe = _dato(datos, "roe")
+    gm = _dato(datos, "gross_margin")
+    fcfni = _dato(datos, "fcf_net_income")
+    if fcfni is not None and abs(fcfni) > 5:
+        fcfni = fcfni / 100  # si se capturó en % (ej. 95) se convierte a razón (0.95)
+    de = _dato(datos, "debt_equity")
+    if de is None:
+        dc = None
+    elif de < 0:
+        dc = 100.0  # capital contable negativo: se trata como deuda muy alta
+    else:
+        dc = de / (1 + de) * 100
+    epsg = _dato(datos, "eps_growth_5y")
+    revg = _dato(datos, "rev_cagr_5y")
+    bb = _dato(datos, "buyback_yield")
+    fcfy = _dato(datos, "fcf_yield")
+    evebit = _dato(datos, "ev_ebit")
+    fv = _dato(datos, "fair_value")
+    price = _dato(datos, "precio_actual")
+    pio = _dato(datos, "piotroski")
+    alt = _dato(datos, "altman_z")
+    m = _dato(datos, "beneish_m")
+    upside = (fv - price) / price if (fv is not None and price is not None and price > 0) else None
+
+    todos = [roic, roic5, roe, gm, fcfni, dc, epsg, revg, bb, fcfy, evebit, fv, pio, alt, m]
+    if all(x is None for x in todos):
+        return None
+
+    # --- TRIBUNAL DE CALIDAD: 3 lentes ---
+    # Lente 1: Greenblatt (ROIC actual y a 5 años)
+    if roic is None and roic5 is None:
+        L1 = "N/D"
+    elif roic is not None and roic5 is not None:
+        L1 = "SÍ" if (roic >= 20 and roic5 >= 20) else ("NO" if (roic < 10 or roic5 < 10) else "MEDIO")
+    else:
+        v = roic if roic is not None else roic5
+        L1 = "MEDIO" if v >= 20 else ("NO" if v < 10 else "MEDIO")
+    # Lente 2: MSCI (ROE con deuda sana)
+    lev = (dc is not None and dc > 60) or (dc is None and alt is not None and alt < 1.81)
+    if roe is None:
+        L2 = "N/D"
+    elif roe >= 15 and not lev:
+        L2 = "SÍ"
+    elif roe < 10 or lev:
+        L2 = "NO"
+    else:
+        L2 = "MEDIO"
+    # Lente 3: AQR (4 pilares: rentable, crece, segura, recompra)
+    conv = (fcfni is not None and fcfni >= 0.8 and fcfy is not None and fcfy > 0)
+    rent = "v" if sum([roe is not None and roe >= 15, gm is not None and gm >= 40, conv]) >= 2 else "i"
+    if epsg is None and revg is None:
+        cre = "i"
+    elif epsg is not None and revg is not None:
+        cre = "v" if (epsg > 0 and revg > 0) else ("x" if (epsg < 0 or revg < 0) else "i")
+    else:
+        g = epsg if epsg is not None else revg
+        cre = "v" if g > 0 else ("x" if g < 0 else "i")
+    if alt is None:
+        seg = "i"
+    elif alt >= 3:
+        seg = "v"
+    elif alt < 1.81:
+        seg = "x"
+    else:
+        seg = "i"
+    if bb is None:
+        pay = "i"
+    elif bb >= 0:
+        pay = "v"
+    elif bb < -2:
+        pay = "x"
+    else:
+        pay = "i"
+    pilares = [rent, cre, seg, pay]
+    L3 = "SÍ" if (pilares.count("v") >= 3 and pilares.count("x") == 0) else ("NO" if pilares.count("x") >= 2 else "MEDIO")
+    n_cal = [L1, L2, L3].count("SÍ")
+    cal = "EXCELENTE" if n_cal == 3 else ("BUENA" if n_cal == 2 else "DÉBIL")
+
+    # --- TRIBUNAL DE PRECIO ---
+    n_val = sum([evebit is not None and 0 < evebit <= 10,
+                 upside is not None and upside >= 0.20,
+                 fcfy is not None and fcfy >= 4])
+    v_c = sum([upside is not None and upside <= -0.10,
+               evebit is not None and (evebit >= 20 or evebit < 0),
+               fcfy is not None and fcfy <= 2])
+    if v_c >= 2 and v_c > n_val:
+        precio = "CARA"
+    elif n_val >= 3 and n_val > v_c:
+        precio = "MUY BARATA"
+    elif n_val == 2 and n_val > v_c:
+        precio = "BARATA"
+    else:
+        precio = "MIXTA"
+
+    # --- TRIBUNAL DE SALUD ---
+    n_sal = sum([pio is not None and pio >= 7, alt is not None and alt >= 3, m is not None and m <= -1.78])
+    salud = "DÉBIL" if ((alt is not None and alt < 1.81) or n_sal <= 1) else ("EXCELENTE" if n_sal == 3 else "MIXTA")
+
+    # --- CATEGORÍA FINAL ---
+    core = [roic, roic5, roe, gm, epsg, revg, fcfni, bb, evebit, fcfy, fv, pio]
+    insuf = sum(1 for x in core if x is None) >= 5
+    trampa = (cal == "DÉBIL" and precio in ("MUY BARATA", "BARATA"))
+    if es_financiera:
+        categoria = "OMITIDA POR MÉTODO"
+    elif insuf:
+        categoria = "DESCARTADA"
+    elif cal == "EXCELENTE" and salud != "DÉBIL" and precio in ("MUY BARATA", "BARATA"):
+        categoria = "DEEP DIVE"
+    elif cal == "EXCELENTE" and salud != "DÉBIL":
+        categoria = "WATCHLIST"
+    elif cal in ("EXCELENTE", "BUENA"):
+        categoria = "NEUTRAL"
+    else:
+        categoria = "DESCARTADA"
+
+    alertas = []
+    if not es_financiera:
+        if trampa:
+            alertas.append("POSIBLE TRAMPA DE VALOR")
+        if cal == "EXCELENTE" and ((upside is not None and upside >= 0.40) or n_val >= 3):
+            alertas.append("¿DEMASIADO BARATA?")
+        if m is not None and m > -1.78:
+            alertas.append("M-SCORE")
+        if cal == "EXCELENTE" and pio is not None and pio <= 3:
+            alertas.append("MEJORA DÉBIL")
+        if alt is not None and alt < 1.81:
+            alertas.append("ALTMAN ZONA DE RIESGO")
+        if cal == "EXCELENTE" and salud == "DÉBIL":
+            alertas.append("EXCELENTE PERO SALUD DÉBIL")
+        if insuf:
+            alertas.append("DATOS INSUFICIENTES")
+
+    # --- TARJETAS POR INDICADOR (dato + estado + frase sencilla) ---
+    def _rango(v, alto, bajo):
+        return "ok" if v >= alto else ("bad" if v < bajo else "warn")
+
+    f_calidad = []
+    if roic is not None:
+        e = _rango(roic, 20, 10)
+        fr = {"ok": "GANA MUCHO POR CADA PESO QUE INVIERTE", "warn": "RENTABILIDAD ACEPTABLE, SIN SER EXCEPCIONAL",
+              "bad": "GANA POCO POR LO QUE INVIERTE"}[e]
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("roic", "ROIC ACTUAL", roic, f"{roic:.1f}%" if roic is not None else "", e, fr))
+    if roic5 is not None:
+        e = _rango(roic5, 20, 10)
+        fr = {"ok": "RENTABLE DE FORMA CONSISTENTE EN 5 AÑOS", "warn": "RENTABILIDAD MEDIA EN LOS ÚLTIMOS 5 AÑOS",
+              "bad": "HISTÓRICAMENTE GANA POCO POR LO QUE INVIERTE"}[e]
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("roic_5y", "ROIC PROMEDIO 5 AÑOS", roic5, f"{roic5:.1f}%" if roic5 is not None else "", e, fr))
+    if roe is not None:
+        if roe >= 15 and not lev:
+            e, fr = "ok", "BUENA GANANCIA PARA LOS ACCIONISTAS"
+        elif roe >= 15 and lev:
+            e, fr = "warn", "ROE ALTO, PERO PUEDE ESTAR INFLADO POR DEUDA"
+        elif roe >= 10:
+            e, fr = "warn", "GANANCIA MODERADA PARA LOS ACCIONISTAS"
+        else:
+            e, fr = "bad", "GANANCIA BAJA PARA LOS ACCIONISTAS"
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("roe", "ROE", roe, f"{roe:.1f}%" if roe is not None else "", e, fr))
+    if dc is not None:
+        e, fr = ("ok", "DEUDA BAJO CONTROL") if dc <= 60 else ("bad", "DEPENDE MUCHO DE PRÉSTAMOS")
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("deuda_capital", "DEUDA / CAPITAL TOTAL", dc, f"{dc:.1f}%" if dc is not None else "", e, fr))
+    if gm is not None:
+        e, fr = ("ok", "VENDE CON MARGEN AMPLIO: DIFÍCIL DE COPIAR") if gm >= 40 else ("warn", "MARGEN AJUSTADO: COMPITE MÁS POR PRECIO")
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("gross_margin", "MARGEN BRUTO", gm, f"{gm:.1f}%" if gm is not None else "", e, fr))
+    if fcfni is not None:
+        e, fr = ("ok", "SUS GANANCIAS SON EFECTIVO REAL") if fcfni >= 0.8 else ("bad", "PARTE DE SUS GANANCIAS NO LLEGA COMO EFECTIVO")
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("fcf_net_income", "FCF / UTILIDAD NETA", fcfni, f"{fcfni:.2f}" if fcfni is not None else "", e, fr))
+    if epsg is not None:
+        e, fr = ("ok", "GANA MÁS POR ACCIÓN QUE HACE 5 AÑOS") if epsg > 0 else (("bad", "GANA MENOS POR ACCIÓN QUE HACE 5 AÑOS") if epsg < 0 else ("warn", "GANANCIA POR ACCIÓN ESTANCADA"))
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("eps_growth_5y", "CRECIMIENTO EPS 5 AÑOS", epsg, f"{epsg:+.1f}%" if epsg is not None else "", e, fr))
+    if revg is not None:
+        e, fr = ("ok", "VENDE MÁS QUE HACE 5 AÑOS") if revg > 0 else (("bad", "VENDE MENOS QUE HACE 5 AÑOS") if revg < 0 else ("warn", "VENTAS ESTANCADAS"))
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("rev_cagr_5y", "CRECIMIENTO INGRESOS 5 AÑOS", revg, f"{revg:+.1f}%" if revg is not None else "", e, fr))
+    if bb is not None:
+        if bb >= 0:
+            e, fr = "ok", "RECOMPRA ACCIONES: TU PARTE CRECE"
+        elif bb >= -2:
+            e, fr = "warn", "EMITE POCAS ACCIONES NUEVAS"
+        else:
+            e, fr = "bad", "EMITE MUCHAS ACCIONES: TU PARTE SE DILUYE"
+    else:
+        e, fr = "nd", ""
+    f_calidad.append(_fila_indicador("buyback_yield", "BUYBACK YIELD", bb, f"{bb:+.1f}%" if bb is not None else "", e, fr))
+
+    f_salud = []
+    if pio is not None:
+        e = "ok" if pio >= 7 else ("bad" if pio <= 3 else "warn")
+        fr = {"ok": "EL NEGOCIO ESTÁ MEJORANDO", "warn": "MEJORA A MEDIAS", "bad": "EL NEGOCIO SE ESTÁ DETERIORANDO"}[e]
+    else:
+        e, fr = "nd", ""
+    f_salud.append(_fila_indicador("piotroski", "PIOTROSKI SCORE", pio, f"{pio:.0f} / 9" if pio is not None else "", e, fr))
+    if alt is not None:
+        e = "ok" if alt >= 3 else ("bad" if alt < 1.81 else "warn")
+        fr = {"ok": "LEJOS DE RIESGO DE QUIEBRA", "warn": "ZONA GRIS: VIGILAR SU SALUD", "bad": "ZONA DE PELIGRO: RIESGO FINANCIERO ALTO"}[e]
+    else:
+        e, fr = "nd", ""
+    f_salud.append(_fila_indicador("altman_z", "ALTMAN Z-SCORE", alt, f"{alt:.2f}" if alt is not None else "", e, fr))
+    if m is not None:
+        e, fr = ("ok", "SIN SEÑALES DE MAQUILLAJE CONTABLE") if m <= -1.78 else ("bad", "POSIBLE MAQUILLAJE CONTABLE: REVISAR")
+    else:
+        e, fr = "nd", ""
+    f_salud.append(_fila_indicador("beneish_m", "BENEISH M-SCORE", m, f"{m:.2f}" if m is not None else "", e, fr))
+
+    f_precio = []
+    if upside is not None:
+        if upside >= 0.20:
+            e, fr = "ok", "COTIZA MUY POR DEBAJO DE SU VALOR ESTIMADO"
+        elif upside <= -0.10:
+            e, fr = "bad", "COTIZA POR ENCIMA DE SU VALOR ESTIMADO"
+        else:
+            e, fr = "warn", "PRECIO CERCANO A SU VALOR ESTIMADO"
+        fr += f" (VALOR {fv:,.2f} VS PRECIO {price:,.2f})"
+    else:
+        e, fr = "nd", ""
+    f_precio.append(_fila_indicador("upside", "UPSIDE VS FAIR VALUE", upside, f"{upside * 100:+.1f}%" if upside is not None else "", e, fr))
+    if evebit is not None:
+        if 0 < evebit <= 10:
+            e, fr = "ok", "BARATA FRENTE A LO QUE GANA"
+        elif evebit < 0:
+            e, fr = "bad", "PIERDE DINERO EN SU OPERACIÓN"
+        elif evebit >= 20:
+            e, fr = "bad", "CARA FRENTE A LO QUE GANA"
+        else:
+            e, fr = "warn", "PRECIO RAZONABLE FRENTE A LO QUE GANA"
+    else:
+        e, fr = "nd", ""
+    f_precio.append(_fila_indicador("ev_ebit", "EV / EBIT", evebit, f"{evebit:.1f}x" if evebit is not None else "", e, fr))
+    if fcfy is not None:
+        if fcfy >= 4:
+            e, fr = "ok", "GENERA MUCHO EFECTIVO PARA LO QUE CUESTA"
+        elif fcfy <= 2:
+            e, fr = "bad", "CARA: GENERA POCO EFECTIVO PARA LO QUE CUESTA"
+        else:
+            e, fr = "warn", "EFECTIVO RAZONABLE PARA LO QUE CUESTA"
+    else:
+        e, fr = "nd", ""
+    f_precio.append(_fila_indicador("fcf_yield", "FCF YIELD", fcfy, f"{fcfy:.1f}%" if fcfy is not None else "", e, fr))
+
+    return {
+        "categoria": categoria,
+        "puntaje": n_cal + n_val + n_sal,
+        "alertas": alertas,
+        "tribunales": {
+            "CALIDAD": {"veredicto": cal, "detalle": f"{n_cal}/3 PRUEBAS", "filas": f_calidad},
+            "SALUD": {"veredicto": salud, "detalle": f"{n_sal}/3 SEÑALES", "filas": f_salud},
+            "PRECIO": {"veredicto": precio, "detalle": f"{n_val} A FAVOR · {v_c} EN CONTRA", "filas": f_precio},
+        },
+    }
+
+
+def _html_seguro(texto):
+    """Evita que el texto rompa el HTML y que el signo $ se interprete como fórmula."""
+    return (str(texto).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("$", "&#36;"))
+
+
+def _icono_info(definicion):
+    return f'<span class="tm-info" title="{_html_seguro(definicion)}">i</span>'
+
+
+def mostrar_veredicto_motor(res, aprendizaje=False):
+    """Dibuja el veredicto: tarjeta de categoría, 3 tribunales y una tarjeta por indicador."""
+    st.markdown(
+        "<style>"
+        ".tm-card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:20px;margin-bottom:14px;"
+        "display:flex;flex-direction:column;justify-content:space-between;text-transform:uppercase;}"
+        ".tm-ind{min-height:175px;}"
+        ".tm-tit{font-size:12px;letter-spacing:.06em;color:#8b949e;font-weight:600;}"
+        ".tm-val{font-size:28px;font-weight:700;color:#ffffff;margin-top:6px;line-height:1.1;}"
+        ".tm-frase{font-size:12px;color:#c9d1d9;margin-top:6px;line-height:1.35;}"
+        ".tm-def{font-size:11px;color:#8b949e;margin-top:10px;line-height:1.45;border-top:1px solid #30363d;padding-top:8px;}"
+        ".tm-pie{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;flex-wrap:wrap;}"
+        ".tm-badge{font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;display:inline-block;margin:2px 4px 2px 0;}"
+        ".tm-info{width:20px;height:20px;border-radius:50%;border:1.5px solid #8b949e;color:#8b949e;font-size:12px;"
+        "font-weight:700;display:inline-flex;align-items:center;justify-content:center;cursor:help;"
+        "font-family:Georgia,serif;text-transform:none;flex-shrink:0;}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+
+    # --- Tarjeta principal: categoría ---
+    color, frase_cat, def_cat = CATEGORIAS_INFO[res["categoria"]]
+    chips = ""
+    for a in res["alertas"]:
+        chips += (f'<span class="tm-badge" style="color:#d29922;background:rgba(210,153,34,.15)" '
+                  f'title="{_html_seguro(ALERTAS_INFO.get(a, ""))}">ALERTA: {_html_seguro(a)}</span>')
+    if not chips:
+        chips = '<span class="tm-badge" style="color:#3fb950;background:rgba(63,185,80,.15)">SIN ALERTAS</span>'
+    extra = ""
+    if aprendizaje:
+        extra = f'<div class="tm-def">{_html_seguro(def_cat)}</div>'
+        for a in res["alertas"]:
+            extra += f'<div class="tm-def"><b>{_html_seguro(a)}:</b> {_html_seguro(ALERTAS_INFO.get(a, ""))}</div>'
+    st.markdown(
+        f'<div class="tm-card" style="border-color:{color}">'
+        f'<div class="tm-tit">CATEGORÍA DEL MOTOR · PUNTAJE {res["puntaje"]}/9</div>'
+        f'<div class="tm-val" style="color:{color}">{_html_seguro(res["categoria"])}</div>'
+        f'<div class="tm-frase">{_html_seguro(frase_cat)}</div>{extra}'
+        f'<div class="tm-pie"><div>{chips}</div>{_icono_info(def_cat)}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Los 3 tribunales ---
+    for clave in ("CALIDAD", "SALUD", "PRECIO"):
+        trib = res["tribunales"][clave]
+        info = TRIBUNALES_INFO[clave]
+        frase_t, estado_t = info["frases"][trib["veredicto"]]
+        txt_b, col_b, fondo_b = ESTADOS_INFO[estado_t]
+        def_t = f'<div class="tm-def">{_html_seguro(info["definicion"])}</div>' if aprendizaje else ""
+        st.markdown(
+            f'<div class="tm-card">'
+            f'<div class="tm-tit">{info["titulo"]} · {_html_seguro(trib["detalle"])}</div>'
+            f'<div class="tm-val" style="font-size:22px">{_html_seguro(trib["veredicto"])}</div>'
+            f'<div class="tm-frase">{_html_seguro(frase_t)}</div>{def_t}'
+            f'<div class="tm-pie"><span class="tm-badge" style="color:{col_b};background:{fondo_b}">{txt_b}</span>'
+            f'{_icono_info(info["definicion"])}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        filas = trib["filas"]
+        for inicio in range(0, len(filas), 3):
+            cols = st.columns(3)
+            for c, fila in zip(cols, filas[inicio:inicio + 3]):
+                txt_e, col_e, fondo_e = ESTADOS_INFO[fila["estado"]]
+                definicion = DEFINICIONES_MOTOR.get(fila["key"], "")
+                def_i = f'<div class="tm-def">{_html_seguro(definicion)}</div>' if aprendizaje else ""
+                with c:
+                    st.markdown(
+                        f'<div class="tm-card tm-ind">'
+                        f'<div><div class="tm-tit">{_html_seguro(fila["nombre"])}</div>'
+                        f'<div class="tm-val">{_html_seguro(fila["valor"])}</div>'
+                        f'<div class="tm-frase">{_html_seguro(fila["frase"])}</div>{def_i}</div>'
+                        f'<div class="tm-pie"><span class="tm-badge" style="color:{col_e};background:{fondo_e}">{txt_e}</span>'
+                        f'{_icono_info(definicion)}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+    st.caption("HERRAMIENTA EDUCATIVA: NINGUNA CATEGORÍA ES UNA ORDEN DE COMPRA O VENTA. LOS NÚMEROS SON LA MITAD DE LA TAREA; LA OTRA MITAD ES EL ANÁLISIS CUALITATIVO.")
+
+
+def _limpiar_formulario_lp():
+    """Se ejecuta ANTES de dibujar la página (on_click), por eso sí puede vaciar los campos sin error."""
+    for key, _ in METRICAS_LP:
+        st.session_state[f"lp_input_{key}"] = ""
+        st.session_state[f"lp_chk_{key}"] = False
+    for key, _, _ in METRICAS_MOTOR:
+        st.session_state[f"lp_motor_{key}"] = ""
+    st.session_state["lp_motor_financiera"] = False
+    st.session_state["lp_ticker_actual"] = ""
 
 
 def mostrar_largo_plazo():
@@ -1003,12 +1511,48 @@ def mostrar_largo_plazo():
             "es_promedio_5y": es_promedio_5y,
         }
 
+    # --- INDICADORES DEL MOTOR DE TRIBUNALES (NUEVO) ---
+    st.markdown("---")
+    st.markdown("#### :material/balance: INDICADORES DEL MOTOR DE TRIBUNALES")
+    st.caption("UN SOLO DATO POR INDICADOR (EL VALOR ACTUAL). LOS ENCUENTRAS EN INVESTINGPRO, MORNINGSTAR, GURUFOCUS O STOCKANALYSIS. SI FALTA ALGUNO, EL MOTOR LO MARCA COMO SIN DATO. PASA EL MOUSE POR EL ÍCONO DE AYUDA DE CADA CAMPO PARA VER QUÉ SIGNIFICA.")
+    with st.container(border=True):
+        cols_motor = st.columns(3)
+        for idx, (key, label, ejemplo) in enumerate(METRICAS_MOTOR):
+            with cols_motor[idx % 3]:
+                valor_m = st.text_input(label, key=f"lp_motor_{key}", placeholder=ejemplo, help=DEFINICIONES_MOTOR.get(key))
+            dato_m = None
+            if valor_m.strip():
+                try:
+                    dato_m = _parsear_dato_unico(valor_m)
+                except ValueError:
+                    st.error(f"REVISA EL FORMATO DE '{label}': DEBE SER UN SOLO NÚMERO. (TEXTO RECIBIDO: '{valor_m}')")
+            datos_actuales[key] = {
+                "label": label,
+                "valores": [dato_m] if dato_m is not None else [],
+                "promedio": dato_m,
+                "es_promedio_5y": False,
+                "dato_unico": True,
+            }
+        es_financiera = st.checkbox(
+            "ES BANCO, ASEGURADORA O UTILITY (EL MÉTODO NO APLICA)",
+            key="lp_motor_financiera",
+            help="EN BANCOS Y ASEGURADORAS LA DEUDA ES SU MATERIA PRIMA Y EN LAS UTILITIES LA GANANCIA ESTÁ REGULADA. EL MOTOR LAS MARCA COMO OMITIDAS PARA NO CALIFICARLAS MAL. VISA, MASTERCARD Y PAYPAL NO CUENTAN COMO BANCOS.",
+        )
+
+    # Si no se capturó el precio, se toma de yfinance con el ticker
+    if datos_actuales["precio_actual"]["promedio"] is None and ticker_lp.strip():
+        precio_auto = _precio_yfinance(ticker_lp.strip().upper())
+        if precio_auto is not None:
+            datos_actuales["precio_actual"]["valores"] = [precio_auto]
+            datos_actuales["precio_actual"]["promedio"] = precio_auto
+            st.caption(f"PRECIO ACTUAL TOMADO DE YFINANCE: {precio_auto:,.2f} USD")
+
     st.markdown("---")
     col_g1, col_g2, col_g3 = st.columns(3)
     with col_g1:
         guardar = st.button("💾 Guardar Empresa", use_container_width=True)
     with col_g2:
-        nueva = st.button("🆕 Limpiar Formulario", use_container_width=True)
+        nueva = st.button("LIMPIAR FORMULARIO", icon=":material/restart_alt:", use_container_width=True, on_click=_limpiar_formulario_lp)
     with col_g3:
         borrar_todo = st.button("🗑️ Borrar Comparaciones", use_container_width=True)
 
@@ -1019,12 +1563,6 @@ def mostrar_largo_plazo():
             st.session_state["lp_empresas_guardadas"][ticker_lp.strip().upper()] = datos_actuales
             st.success(f"✅ Datos de {ticker_lp.strip().upper()} guardados. Puedes limpiar el formulario y capturar otra empresa para comparar.")
 
-    if nueva:
-        for key, _ in METRICAS_LP:
-            st.session_state[f"lp_input_{key}"] = ""
-            st.session_state[f"lp_chk_{key}"] = False
-        st.session_state["lp_ticker_actual"] = ""
-        st.rerun()
 
     if borrar_todo:
         st.session_state["lp_empresas_guardadas"] = {}
@@ -1056,6 +1594,24 @@ def mostrar_largo_plazo():
             }
         df_comparacion = pd.DataFrame(tabla)
         st.dataframe(df_comparacion, use_container_width=True)
+
+    # --- VEREDICTO DEL MOTOR DE TRIBUNALES (NUEVO, SIN IA) ---
+    st.markdown("---")
+    col_vt, col_va = st.columns([3, 1])
+    with col_vt:
+        st.markdown("### :material/gavel: VEREDICTO DEL MOTOR")
+        st.caption("CALIFICACIÓN AUTOMÁTICA CON REGLAS FIJAS: MISMOS DATOS, MISMO RESULTADO. NO USA IA NI CONSUME TOKENS.")
+    with col_va:
+        modo_aprendizaje = st.toggle(
+            "MODO APRENDIZAJE",
+            key="lp_modo_aprendizaje",
+            help="MUESTRA LA EXPLICACIÓN COMPLETA DE CADA INDICADOR DEBAJO DE SU TARJETA.",
+        )
+    resultado_motor = evaluar_tribunales(datos_actuales, es_financiera)
+    if resultado_motor is None:
+        st.caption("LLENA LOS INDICADORES PARA VER EL VEREDICTO.")
+    else:
+        mostrar_veredicto_motor(resultado_motor, modo_aprendizaje)
 
     # --- Análisis con IA ---
     st.markdown("---")

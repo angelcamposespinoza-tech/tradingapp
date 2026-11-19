@@ -1691,6 +1691,148 @@ def _ranking_motor(empresas):
     return sorted(empresas, key=_clave, reverse=True)
 
 
+
+# ============================================================
+# TABLA CARA A CARA (LA ARMA EL CÓDIGO: NÚMEROS EXACTOS, SIN IA)
+# ============================================================
+
+# Indicadores del panel del motor que se comparan (precio y fair value no: se comparan vía el upside)
+MOTOR_CARA_A_CARA = ["roic_5y", "eps_growth_5y", "rev_cagr_5y", "buyback_yield", "fcf_yield", "ev_ebit",
+                     "piotroski", "altman_z", "beneish_m"]
+MENOR_ES_MEJOR_MOTOR = {"ev_ebit", "beneish_m"}
+CAMPOS_PCT_MOTOR = {"roic_5y", "eps_growth_5y", "rev_cagr_5y", "buyback_yield", "fcf_yield"}
+
+
+def _fmt_num(key, v):
+    if v is None:
+        return "N/D"
+    if key in CAMPOS_CON_SIMBOLO_PORCENTAJE or key in CAMPOS_PCT_MOTOR or key == "upside":
+        return f"{v:.1f}%"
+    return f"{v:.2f}"
+
+
+def _ganador(valores_por_empresa, menor_es_mejor, key=""):
+    """valores_por_empresa: {nombre: valor}. Regresa el nombre ganador, 'EMPATE' o '-'."""
+    validos = {k: v for k, v in valores_por_empresa.items() if v is not None}
+    if len(validos) < 2:
+        return "-"
+
+    def _orden(v):
+        if key == "ev_ebit" and v <= 0:
+            return float("inf")  # EV/EBIT negativo = pierde dinero: es lo peor
+        return v if menor_es_mejor else -v
+
+    ordenados = sorted(validos.items(), key=lambda kv: _orden(kv[1]))
+    if len(ordenados) > 1 and _orden(ordenados[0][1]) == _orden(ordenados[1][1]):
+        return "EMPATE"
+    return ordenados[0][0]
+
+
+def _ganador_tendencia(tendencias_por_empresa, menor_es_mejor):
+    """Gana quien mejora más (en %). Si nadie mejora, 'NINGUNA MEJORA'."""
+    puntajes = {}
+    for nombre, t in tendencias_por_empresa.items():
+        if not t:
+            continue
+        base = abs(t["antiguo"]) if t["antiguo"] != 0 else 1
+        cambio = (t["reciente"] - t["antiguo"]) / base
+        puntajes[nombre] = (-cambio if menor_es_mejor else cambio, t["calidad"])
+    if len(puntajes) < 2:
+        return "-"
+    if not any(cal == "favorable" for _, cal in puntajes.values()):
+        return "NINGUNA MEJORA"
+    ordenados = sorted(puntajes.items(), key=lambda kv: kv[1][0], reverse=True)
+    if ordenados[0][1][0] == ordenados[1][1][0]:
+        return "EMPATE"
+    return ordenados[0][0]
+
+
+def _tabla_cara_a_cara(empresas):
+    """Arma la comparación indicador por indicador: dato de hoy + tendencia de cada empresa,
+    mejor nivel y mejor tendencia. Regresa (DataFrame, marcador, texto_markdown_para_la_IA)."""
+    nombres = [e["nombre"] for e in empresas]
+    filas = []
+
+    def _agregar(key, etiqueta, niveles, tendencias, menor):
+        if sum(1 for v in niveles.values() if v is not None) < 2:
+            return
+        fila = {"INDICADOR": etiqueta.upper()}
+        for n in nombres:
+            celda = _fmt_num(key, niveles.get(n))
+            t = tendencias.get(n)
+            if t:
+                dec = 1 if key in CAMPOS_CON_SIMBOLO_PORCENTAJE else 2
+                celda += f" · {t['direccion']} ({t['antiguo']:.{dec}f} → {t['reciente']:.{dec}f})"
+            fila[n] = celda
+        fila["MEJOR NIVEL"] = _ganador(niveles, menor, key)
+        fila["MEJOR TENDENCIA"] = _ganador_tendencia(tendencias, menor) if any(tendencias.values()) else "-"
+        filas.append(fila)
+
+    # 1) Los 20 indicadores del formulario: nivel = dato más reciente (o el promedio 5Y si así se capturó)
+    for key, label in METRICAS_LP:
+        niveles, tendencias = {}, {}
+        for e in empresas:
+            info = e["datos"].get(key, {})
+            if info.get("es_promedio_5y") or not info.get("valores"):
+                niveles[e["nombre"]] = info.get("promedio")
+            else:
+                niveles[e["nombre"]] = info["valores"][0]
+            tendencias[e["nombre"]] = info.get("tendencia")
+        _agregar(key, label, niveles, tendencias, key in MENOR_ES_MEJOR)
+
+    # 2) Indicadores del motor (un solo dato, sin tendencia)
+    for key in MOTOR_CARA_A_CARA:
+        niveles = {e["nombre"]: e["datos"].get(key, {}).get("promedio") for e in empresas}
+        etiqueta = next((lbl for k, lbl, _ in METRICAS_MOTOR if k == key), key)
+        _agregar(key, etiqueta, niveles, {}, key in MENOR_ES_MEJOR_MOTOR)
+
+    # 3) Upside contra el Fair Value
+    upsides = {}
+    for e in empresas:
+        fv = e["datos"].get("fair_value", {}).get("promedio")
+        pr = e["datos"].get("precio_actual", {}).get("promedio")
+        upsides[e["nombre"]] = (fv - pr) / pr * 100 if (fv is not None and pr) else None
+    _agregar("upside", "UPSIDE VS FAIR VALUE", upsides, {}, False)
+
+    df = pd.DataFrame(filas, columns=["INDICADOR"] + nombres + ["MEJOR NIVEL", "MEJOR TENDENCIA"])
+
+    # Marcador
+    criterios_nivel = [f for f in filas if f["MEJOR NIVEL"] not in ("-",)]
+    criterios_tend = [f for f in filas if f["MEJOR TENDENCIA"] not in ("-",)]
+    marcador = {
+        n: {
+            "nivel": sum(1 for f in criterios_nivel if f["MEJOR NIVEL"] == n),
+            "tendencia": sum(1 for f in criterios_tend if f["MEJOR TENDENCIA"] == n),
+        }
+        for n in nombres
+    }
+    marcador_txt = " · ".join(
+        f"{n}: GANA {m['nivel']} DE {len(criterios_nivel)} EN NIVEL Y {m['tendencia']} DE {len(criterios_tend)} EN TENDENCIA"
+        for n, m in marcador.items()
+    )
+
+    # Texto en tabla markdown para que la IA cite los mismos números
+    encabezado = "| " + " | ".join(df.columns) + " |"
+    separador = "|" + "---|" * len(df.columns)
+    cuerpo = ["| " + " | ".join(str(v) for v in fila) + " |" for fila in df.itertuples(index=False)]
+    texto_md = "\n".join([encabezado, separador] + cuerpo) + f"\n\nMARCADOR (calculado por código): {marcador_txt}"
+    return df, marcador, marcador_txt, texto_md
+
+
+def _mostrar_cara_a_cara(df, marcador, marcador_txt):
+    """Dibuja la tabla cara a cara y el marcador."""
+    if df.empty:
+        st.caption("NO HAY INDICADORES CAPTURADOS EN AL MENOS DOS EMPRESAS PARA COMPARAR CARA A CARA.")
+        return
+    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.caption("NIVEL = QUIÉN ESTÁ MEJOR HOY (DATO MÁS RECIENTE). TENDENCIA = QUIÉN VA MEJORANDO MÁS (AÑOS ANTIGUOS → RECIENTES). "
+               "EN DEUDA, MÚLTIPLOS DE VALUACIÓN, EV/EBIT Y BENEISH, GANA EL NÚMERO MÁS BAJO.")
+    cols = st.columns(len(marcador))
+    for c, (nombre, m) in zip(cols, marcador.items()):
+        with c:
+            st.metric(f"{nombre}", f"{m['nivel']} EN NIVEL", f"{m['tendencia']} EN TENDENCIA", delta_color="off")
+
+
 def _extraer_linea(texto, etiqueta):
     """Busca una línea tipo 'ETIQUETA: valor' en la respuesta de la IA."""
     match = re.search(rf'{etiqueta}:\s*(.+)', texto)
@@ -1814,7 +1956,7 @@ def mostrar_largo_plazo():
     if len(empresas_con_datos) >= 2:
         st.markdown("---")
         st.markdown("#### :material/leaderboard: COMPARACIÓN RÁPIDA DEL MOTOR")
-        st.caption("ORDENADAS POR CATEGORÍA Y PUNTAJE DEL MOTOR. ES UNA REFERENCIA NUMÉRICA; LA IA HACE LA COMPARACIÓN COMPLETA CON TU PERFIL.")
+        st.caption("ORDENADAS POR CATEGORÍA Y PUNTAJE DEL MOTOR. DEBAJO, LA COMPARACIÓN CARA A CARA DE CADA INDICADOR. ES UNA REFERENCIA NUMÉRICA; LA IA HACE LA COMPARACIÓN COMPLETA CON TU PERFIL.")
         ranking = _ranking_motor(empresas_con_datos)
         tabla = {}
         for e in ranking:
@@ -1828,10 +1970,12 @@ def mostrar_largo_plazo():
                 "ALERTAS": ", ".join(res["alertas"]) if (res and res["alertas"]) else "NINGUNA",
                 "TENDENCIA": (f"{res['n_mejor']} MEJORANDO / {res['n_peor']} EMPEORANDO" if res else "-"),
             }
-            for info in e["datos"].values():
-                fila[info["label"]] = round(info["promedio"], 2) if info["promedio"] is not None else "-"
             tabla[e["nombre"]] = fila
         st.dataframe(pd.DataFrame(tabla).astype(str), use_container_width=True)
+
+        st.markdown("#### :material/compare_arrows: CARA A CARA POR INDICADOR")
+        df_cara, marcador_cara, marcador_cara_txt, _ = _tabla_cara_a_cara(empresas_con_datos)
+        _mostrar_cara_a_cara(df_cara, marcador_cara, marcador_cara_txt)
 
     # ============================================================
     # PERFIL DE INVERSIONISTA
@@ -2121,10 +2265,13 @@ def mostrar_largo_plazo():
             ]
             resumen_total = "\n\n".join(bloques)
             nombres_txt = ", ".join(e["nombre"] for e in empresas_con_datos)
+            df_cara, marcador_cara, marcador_cara_txt, cara_md = _tabla_cara_a_cara(empresas_con_datos)
+            ejemplo_a = empresas_con_datos[0]["nombre"]
+            ejemplo_b = empresas_con_datos[1]["nombre"]
             instruccion_busqueda = (
                 "Usa Google Search para investigar noticias recientes (últimos 3-6 meses), posición competitiva, "
                 "riesgos, ventajas competitivas (moat) y catalizadores relevantes de cada empresa. "
-                "Incluye una sección de 'CONTEXTO CUALITATIVO' con lo que encuentres para cada una."
+                "Úsalo en la sección 3 (CONTEXTO CUALITATIVO)."
             ) if incluir_cualitativo else ""
 
             prompt = f"""
@@ -2143,28 +2290,44 @@ def mostrar_largo_plazo():
 
             {instruccion_busqueda}
 
-            TAREA:
-            1. Compara rentabilidad, salud financiera, valuación, crecimiento y generación de caja entre todas las empresas.
-               Evalúa si los márgenes de cada una son consistentes o volátiles, usando los datos por año entre paréntesis.
-               MUY IMPORTANTE: usa la "tendencia calculada" de cada indicador y el conteo de mejorando/empeorando de cada
-               empresa para decir claramente cuál está MEJORANDO y cuál está EMPEORANDO con el tiempo. Una empresa con buenos
-               números hoy pero tendencia negativa debe pesar menos que una con números similares que va mejorando.
-            2. Usa el VEREDICTO DEL MOTOR de cada empresa y explica en lenguaje sencillo qué significan sus indicadores
-               clave (Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield, upside). Si tu conclusión difiere del ranking
-               del motor, explica claramente por qué con base en los datos.
-            3. Arma una TABLA COMPARATIVA en formato markdown: una fila por criterio (Calidad del negocio, Salud financiera,
-               Precio / valuación, Crecimiento, Generación de caja, Riesgo, Tendencia (mejorando / empeorando), Categoría del motor)
-               y una columna por empresa.
-               En cada celda pon una evaluación corta y marca con la palabra GANA la mejor empresa de cada criterio.
-            4. MEJOR OBJETIVAMENTE: indica si alguna empresa es superior a las demás en la mayoría de los criterios,
-               incluida su tendencia, sin importar el perfil. Si ninguna es claramente superior, dilo y explica por qué.
-            5. MEJOR PARA EL PERFIL: según la tolerancia al riesgo, el objetivo y el horizonte del inversionista,
-               indica qué empresa encaja mejor y por qué, y cuál encaja peor y por qué. Considera la tendencia: un perfil
-               conservador debe evitar empresas que van empeorando aunque hoy se vean baratas.
-            6. Indica si la mejor objetiva y la mejor para el perfil coinciden. Si no coinciden, explica la diferencia
-               en lenguaje sencillo (por ejemplo: una es mejor negocio pero es demasiado riesgosa para un perfil conservador).
+            TABLA CARA A CARA (calculada por código con los datos exactos; cada celda = dato más reciente · tendencia
+            (promedio años antiguos -> recientes); MEJOR NIVEL = quién está mejor hoy; MEJOR TENDENCIA = quién mejora más):
+            {cara_md}
 
-            Termina SIEMPRE con una sección 'VEREDICTO FINAL' de máximo 5 líneas, en lenguaje sencillo.
+            REGLAS DE ESTILO OBLIGATORIAS:
+            - No repitas la tabla cara a cara completa: el usuario ya la ve en pantalla. Cita sus números.
+            - Cada comparación se escribe CARA A CARA con los números, con el formato "{ejemplo_a} X vs {ejemplo_b} Y"
+              (ejemplo: "ROE: {ejemplo_a} 34% vs {ejemplo_b} 38%"). Nunca digas "es mejor" sin poner los números.
+            - Para cada indicador clave responde tres cosas: QUIÉN ESTÁ MEJOR HOY (nivel), QUIÉN VA MEJORANDO (tendencia)
+              y QUÉ PESA MÁS PARA ESTE PERFIL.
+            - Cuando el mejor nivel y la mejor tendencia sean de empresas distintas, explícalo siempre así:
+              "{ejemplo_a} tiene hoy el ROE más alto (38% vs 34%), pero va bajando (de 42% a 38%); {ejemplo_b} tiene menos,
+              pero va subiendo (de 28% a 34%). Si ambas tendencias siguen, la diferencia se podría cerrar. Para un perfil
+              conservador pesa más la ventaja actual; para uno de crecimiento, la mejora."
+            - Usa la tendencia: una empresa con buenos números hoy pero tendencia negativa debe pesar menos que una con
+              números similares que va mejorando.
+            - Si tu conclusión difiere del ranking del motor, explica claramente por qué con base en los datos.
+            - Lenguaje sencillo; explica brevemente qué significa cada indicador técnico la primera vez que lo menciones
+              (Piotroski, Altman Z, Beneish M, EV/EBIT, FCF Yield, upside).
+
+            FORMATO OBLIGATORIO DE LA RESPUESTA (usa exactamente estos títulos, en este orden):
+
+            ## 2. ANÁLISIS CARA A CARA
+            Un subtítulo ### por bloque: Rentabilidad, Márgenes, Salud financiera, Valuación y precio,
+            Crecimiento y generación de caja. En cada bloque, de 2 a 4 frases cara a cara con números, nivel y tendencia.
+            Omite un bloque solo si no hay datos para él.
+
+            ## 3. CONTEXTO CUALITATIVO
+            Solo si investigaste noticias: 2 o 3 frases por empresa (moat, riesgos, catalizadores). Si no, omite esta sección.
+
+            ## 4. MARCADOR Y VEREDICTO
+            - MARCADOR: repite el marcador calculado por código y di qué significa (quién está mejor hoy y quién viene subiendo).
+            - MEJOR OBJETIVAMENTE: cuál es superior en la mayoría de los criterios, incluida su tendencia, sin importar el perfil
+              (o di que ninguna es claramente superior y por qué).
+            - MEJOR PARA TU PERFIL: cuál encaja mejor con la tolerancia al riesgo, el objetivo y el horizonte, y cuál encaja peor.
+              Un perfil conservador debe evitar empresas que van empeorando aunque hoy se vean baratas.
+            - ¿COINCIDEN?: si la mejor objetiva y la mejor para el perfil no son la misma, explica la diferencia en una o dos frases.
+            - VEREDICTO FINAL: máximo 3 líneas, en lenguaje sencillo.
             Recuerda que es un análisis educativo: ninguna conclusión es una orden de compra o venta.
 
             Después, escribe estas dos líneas exactas, cada una en su propia línea y SIN NADA MÁS en esa línea:
@@ -2173,7 +2336,11 @@ def mostrar_largo_plazo():
             """
 
             def _mostrar_comparacion(texto):
-                st.markdown(texto)
+                st.markdown("## 1. CARA A CARA (DATOS EXACTOS)")
+                _mostrar_cara_a_cara(df_cara, marcador_cara, marcador_cara_txt)
+                # Quita del texto visible las 2 líneas técnicas (se muestran abajo como tarjetas)
+                texto_visible = re.sub(r'^\s*(MEJOR_OBJETIVA|MEJOR_PARA_PERFIL):.*$', '', texto, flags=re.MULTILINE)
+                st.markdown(texto_visible)
                 mejor_obj = _extraer_linea(texto, "MEJOR_OBJETIVA")
                 mejor_perfil = _extraer_linea(texto, "MEJOR_PARA_PERFIL")
                 if mejor_obj or mejor_perfil:
